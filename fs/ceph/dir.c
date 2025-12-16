@@ -7,6 +7,10 @@
 #include <linux/sched.h>
 #include <linux/xattr.h>
 
+#ifdef CONFIG_RSBAC
+#include <rsbac/hooks.h>
+#endif
+
 #include "super.h"
 #include "mds_client.h"
 #include "crypto.h"
@@ -197,6 +201,12 @@ static int __dcache_readdir(struct file *file,  struct dir_context *ctx,
 	u64 idx = 0;
 	int err = 0;
 
+#if defined(CONFIG_RSBAC_FSOBJ_HIDE)
+	enum  rsbac_target_t          rsbac_target;
+	union rsbac_target_id_t       rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	doutc(cl, "%p %llx.%llx v%u at %llx\n", dir, ceph_vinop(dir),
 	      (unsigned)shared_gen, ctx->pos);
 
@@ -265,6 +275,45 @@ static int __dcache_readdir(struct file *file,  struct dir_context *ctx,
 		spin_unlock(&dentry->d_lock);
 
 		if (emit_dentry) {
+
+#if defined(CONFIG_RSBAC_CAP_FD_HIDE) || defined(CONFIG_RSBAC_FSOBJ_HIDE)
+			bool do_hide = false;
+
+#if defined(CONFIG_RSBAC_CAP_FD_HIDE)
+			if(rsbac_cap_hide_fd(d_inode(dentry)))
+				do_hide = true;
+#endif
+#if defined(CONFIG_RSBAC_FSOBJ_HIDE)
+#if defined(CONFIG_RSBAC_CAP_FD_HIDE)
+			else {
+#endif
+			rsbac_target = T_FILE;
+			if (S_ISDIR(d_inode(dentry)->i_mode))
+				rsbac_target = T_DIR;
+			else if (S_ISFIFO(d_inode(dentry)->i_mode))
+				rsbac_target = T_FIFO;
+			else if (S_ISLNK(d_inode(dentry)->i_mode))
+				rsbac_target = T_SYMLINK;
+			else if (S_ISSOCK(d_inode(dentry)->i_mode))
+				rsbac_target = T_UNIXSOCK;
+			rsbac_target_id.file.device = d_inode(dentry)->i_sb->s_dev;
+			rsbac_target_id.file.inode  = d_inode(dentry)->i_ino;
+			rsbac_target_id.file.dentry_p = dentry;
+			rsbac_attribute_value.dummy = 0;
+			if (!rsbac_adf_request(R_SEARCH,
+						task_pid(current),
+						rsbac_target,
+						rsbac_target_id,
+						A_none,
+						rsbac_attribute_value))
+				do_hide = true;
+#if defined(CONFIG_RSBAC_CAP_FD_HIDE)
+			}
+#endif
+#endif
+			if (!do_hide) {
+#endif
+
 			doutc(cl, " %llx dentry %p %pd %p\n", di->offset,
 			      dentry, dentry, d_inode(dentry));
 			ctx->pos = di->offset;
@@ -276,6 +325,10 @@ static int __dcache_readdir(struct file *file,  struct dir_context *ctx,
 				break;
 			}
 			ctx->pos++;
+
+#if defined(CONFIG_RSBAC_CAP_FD_HIDE) || defined(CONFIG_RSBAC_FSOBJ_HIDE)
+			}
+#endif
 
 			if (last)
 				dput(last);
@@ -551,6 +604,32 @@ more:
 
 		if (WARN_ON_ONCE(!rde->inode.in))
 			return -EIO;
+
+#if defined(CONFIG_RSBAC_CAP_FD_HIDE)
+		if (rsbac_cap_fd_hiding) {
+			struct inode *rsbac_inode;
+
+			rsbac_inode = new_inode(inode->i_sb);
+			if (rsbac_inode) {
+				bool rsbac_res;
+
+				if (!inode_init_always_gfp(inode->i_sb, rsbac_inode, GFP_KERNEL)) {
+					rsbac_inode->i_mode = le32_to_cpu(rde->inode.in->mode);
+					rsbac_inode->i_uid = KUIDT_INIT(le32_to_cpu(rde->inode.in->uid));
+					rsbac_inode->i_gid = KGIDT_INIT(le32_to_cpu(rde->inode.in->gid));
+					rsbac_inode->i_op = inode->i_op;
+					rsbac_inode->i_fop = inode->i_fop;
+					rsbac_inode->i_ino = ceph_present_ino(inode->i_sb, le64_to_cpu(rde->inode.in->ino));
+					rsbac_res = rsbac_cap_hide_fd(rsbac_inode);
+				} else {
+					rsbac_res = false;
+				}
+				iput(rsbac_inode);
+				if (rsbac_res)
+					continue;
+			}
+		}
+#endif
 
 		ctx->pos = rde->offset;
 		doutc(cl, "%p %llx.%llx (%d/%d) -> %llx '%.*s' %p\n", inode,

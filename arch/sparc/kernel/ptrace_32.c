@@ -27,6 +27,8 @@
 
 #include "kernel.h"
 
+#include <rsbac/hooks.h>
+
 /* #define ALLOW_INIT_TRACING */
 
 /*
@@ -167,6 +169,28 @@ static int fpregs32_get(struct task_struct *target,
 			const struct user_regset *regset,
 			struct membuf to)
 {
+
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rcu_read_lock();
+	rsbac_target_id.process = find_pid_ns(pid, &init_pid_ns);
+	rsbac_attribute_value.trace_request = request;
+	if (!rsbac_adf_request(R_TRACE,
+				task_pid(current),
+				T_PROCESS,
+				rsbac_target_id,
+				A_trace_request,
+				rsbac_attribute_value))
+	{
+		rcu_read_unlock();
+		return -EPERM;
+	}
+	rcu_read_unlock();
+#endif
+
 #if 0
 	if (target == current)
 		save_and_clear_fpu();

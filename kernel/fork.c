@@ -114,6 +114,8 @@
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
 
+#include <rsbac/hooks.h>
+
 /* For dup_mmap(). */
 #include "../mm/internal.h"
 
@@ -2576,6 +2578,13 @@ pid_t kernel_clone(struct kernel_clone_args *args)
 	int trace = 0;
 	pid_t nr;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	enum  rsbac_attribute_t rsbac_attribute;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	/*
 	 * For legacy clone() calls, CLONE_PIDFD uses the parent_tid argument
 	 * to return the pidfd. Hence, CLONE_PIDFD and CLONE_PARENT_SETTID are
@@ -2589,6 +2598,23 @@ pid_t kernel_clone(struct kernel_clone_args *args)
 	    (clone_flags & CLONE_PARENT_SETTID) &&
 	    (args->pidfd == args->parent_tid))
 		return -EINVAL;
+
+#ifdef CONFIG_RSBAC
+	rsbac_attribute = A_none;
+	rsbac_attribute_value.dummy = 0;
+	if(current->pid) {
+		rsbac_pr_debug(aef, "[sys_fork(),sys_clone(),sys_vfork]: calling ADF\n");
+		rsbac_target_id.process = task_pid(current);
+		if (!rsbac_adf_request(R_CLONE,
+					rsbac_target_id.process,
+					T_PROCESS,
+					rsbac_target_id,
+					rsbac_attribute,
+					rsbac_attribute_value)) {
+			return -EPERM;
+		}
+	}
+#endif
 
 	/*
 	 * Determine whether and which event to report to ptracer.  When
@@ -2639,6 +2665,32 @@ pid_t kernel_clone(struct kernel_clone_args *args)
 		task_unlock(p);
 	}
 
+#ifdef CONFIG_RSBAC
+	if (clone_flags & CLONE_KTHREAD) {
+		rsbac_attribute = A_kernel_thread;
+		rsbac_attribute_value.kernel_thread = 1;
+		rsbac_mark_kthread(pid);
+		rsbac_kthread_notify(pid);
+	}
+
+	if (current->pid) {
+		rsbac_pr_debug(aef, "[sys_fork(),sys_clone(),sys_vfork()]: calling ADF_set_attr\n");
+		rsbac_target_id.process = task_pid(current);
+		rsbac_new_target_id.process = pid;
+		if (unlikely(rsbac_adf_set_attr(R_CLONE,
+						rsbac_target_id.process,
+						T_PROCESS,
+						rsbac_target_id,
+						T_PROCESS,
+						rsbac_new_target_id,
+						rsbac_attribute,
+						rsbac_attribute_value))) {
+			rsbac_printk(KERN_WARNING
+					"do_fork() [sys_fork(), sys_clone()]: rsbac_adf_set_attr() returned error!\n");
+		}
+	}
+#endif
+
 	wake_up_new_task(p);
 
 	/* forking complete and child started to run, tell ptracer */
@@ -2661,7 +2713,12 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, const char *name,
 		    unsigned long flags)
 {
 	struct kernel_clone_args args = {
-		.flags		= ((flags | CLONE_VM | CLONE_UNTRACED) & ~CSIGNAL),
+		.flags		= ((flags | CLONE_VM |
+#ifdef CONFIG_RSBAC
+				    CLONE_KTHREAD |
+#endif
+				    CLONE_UNTRACED) & ~CSIGNAL),
+
 		.exit_signal	= (flags & CSIGNAL),
 		.fn		= fn,
 		.fn_arg		= arg,
