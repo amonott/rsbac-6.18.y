@@ -4,9 +4,9 @@
 /* Facility (ADF) - REG / Decision Module Registration */
 /* File: rsbac/adf/reg/main.c                        */
 /*                                                   */
-/* Author and (c) 1999-2024: Amon Ott <ao@rsbac.org> */
+/* Author and (c) 1999-2025: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 13/Dec/2024                        */
+/* Last modified: 16/Dec/2025                        */
 /*************************************************** */
 
 #include <linux/types.h>
@@ -183,7 +183,6 @@ static struct rsbac_reg_list_item_t*
       new_item_p->entry.name[RSBAC_REG_NAME_LEN] = 0;
       new_item_p->entry.request_func = entry.request_func;
       new_item_p->entry.set_attr_func = entry.set_attr_func;
-      new_item_p->entry.need_overwrite_func = entry.need_overwrite_func;
       new_item_p->entry.write_func = entry.write_func;
       new_item_p->entry.mount_func = entry.mount_func;
       new_item_p->entry.umount_func = entry.umount_func;
@@ -542,31 +541,6 @@ inline int rsbac_adf_set_attr_reg(
     return error;
   }
 
-
-#ifdef CONFIG_RSBAC_SECDEL
-inline rsbac_boolean_t rsbac_need_overwrite_reg(struct dentry * dentry_p)
-  {
-    rsbac_boolean_t need_overwrite = FALSE;
-    struct rsbac_reg_list_item_t    * item_p;
-
-    reg_read_lock();
-    item_p=list_head.head;
-    while(item_p)
-      {
-        if(   item_p->entry.need_overwrite_func
-        #ifdef CONFIG_RSBAC_SWITCH_REG
-           && item_p->entry.switch_on
-        #endif
-          )
-          if(!need_overwrite)
-            need_overwrite = item_p->entry.need_overwrite_func(dentry_p);
-        item_p=item_p->next;
-      }
-    reg_read_unlock();
-    return need_overwrite;
-  }
-#endif
-
 /* mounting and umounting */
 inline int rsbac_mount_reg(__u32 major, __u32 minor)
   {
@@ -698,7 +672,6 @@ rsbac_reg_handle_t rsbac_reg_register(        rsbac_version_t    version,
     /* check entry */
     if(   (   !entry.request_func
            && !entry.set_attr_func
-           && !entry.need_overwrite_func
            && !entry.write_func
            && !entry.mount_func
            && !entry.umount_func

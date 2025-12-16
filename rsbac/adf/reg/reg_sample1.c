@@ -1,7 +1,7 @@
 /*
  * RSBAC REG decision module sample 1
  *
- * Author and (c) 1999-2024 Amon Ott <ao@rsbac.org>
+ * Author and (c) 1999-2025 Amon Ott <ao@rsbac.org>
  */
 
 #include <linux/module.h>
@@ -20,7 +20,6 @@
 
 static u_long nr_request_calls = 0;
 static u_long nr_set_attr_calls = 0;
-static u_long nr_need_overwrite_calls = 0;
 static u_long nr_system_calls = 0;
 static void * system_call_arg = NULL;
 
@@ -78,8 +77,6 @@ reg_sample_proc_show(struct seq_file *m, void *v)
                  nr_request_calls);
   seq_printf(m, "%lu calls to set_attr function.\n",
                  nr_set_attr_calls);
-  seq_printf(m, "%lu calls to need_overwrite function.\n",
-                 nr_need_overwrite_calls);
   seq_printf(m, "%lu calls to system_call function %lu, last arg was %p.\n",
                  nr_system_calls,
                  syscall_dispatcher_handle,
@@ -133,12 +130,6 @@ static  int set_attr_func ( enum  rsbac_adf_request_t     request,
     return 0;
   }
 
-static rsbac_boolean_t need_overwrite_func (struct dentry * dentry_p)
-  {
-    nr_need_overwrite_calls++;
-    return FALSE;
-  }
-
 static int syscall_func (void * arg)
   {
     nr_system_calls++;
@@ -179,7 +170,6 @@ int init_module(void)
   entry.handle = handle;
   entry.request_func = request_func;
   entry.set_attr_func = set_attr_func;
-  entry.need_overwrite_func = need_overwrite_func;
   entry.switch_on = TRUE;
   rsbac_printk(KERN_INFO "RSBAC REG decision module sample 1: Registering to ADF.\n");
   if(rsbac_reg_register(RSBAC_REG_VERSION, entry) < 0)

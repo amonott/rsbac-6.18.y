@@ -4,9 +4,9 @@
 /* Facility (ADF) - Role Compatibility               */
 /* File: rsbac/adf/rc/syscalls.c                     */
 /*                                                   */
-/* Author and (c) 1999-2024: Amon Ott <ao@rsbac.org> */
+/* Author and (c) 1999-2025: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 13/Dec/2024                        */
+/* Last modified: 16/Dec/2025                        */
 /*************************************************** */
 
 #include <linux/string.h>
@@ -244,37 +244,6 @@ int rsbac_rc_sys_get_item(
               /* getting names is always allowed */
               break;
 
-            case RI_type_fd_need_secdel:
-              if(target != RT_TYPE)
-                return -RSBAC_EINVALIDTARGET;
-              if(   (err=rsbac_rc_check_type_comp(T_FILE, tid.type, RCR_ADMIN, 0))
-                 && (err=rsbac_rc_test_role_admin(FALSE))
-                )
-                {
-                  if(err == -EPERM)
-                    {
-                      rsbac_uid_t user;
-
-                      rsbac_get_owner(&user);
-                      rsbac_printk(KERN_INFO
-                                   "rsbac_rc_sys_get_item(): reading fd_need_secdel of type %u denied for pid %u, user %u - no ADMIN right!\n",
-                                   tid.type,
-                                   current->pid,
-                                   user);
-                      #ifdef CONFIG_RSBAC_SOFTMODE
-                      if(   !rsbac_softmode
-                      #ifdef CONFIG_RSBAC_SOFTMODE_IND
-                         && !rsbac_ind_softmode[SW_RC]
-                      #endif
-                        )
-                      #endif
-                        return err;
-                    }
-                  else
-                    return err;
-                }
-              break;
-
             default:
               if(target != RT_ROLE)
                 return -RSBAC_EINVALIDATTR;
@@ -332,7 +301,6 @@ int rsbac_rc_sys_set_item(
           {
           /* type targets */
             case RI_type_fd_name:
-            case RI_type_fd_need_secdel:
             case RI_type_fd_remove:
               if(target != RT_TYPE)
                 return -RSBAC_EINVALIDTARGET;

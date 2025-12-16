@@ -1,7 +1,7 @@
 /*
  * RSBAC REG decision module sample
  *
- * Author and (c) 1999-2024 Amon Ott <ao@rsbac.org>
+ * Author and (c) 1999-2025 Amon Ott <ao@rsbac.org>
  */
 
 /* general stuff */
@@ -27,8 +27,6 @@ static u_long nr_request_calls = 0;
 #define ORD_request 1
 static u_long nr_set_attr_calls = 0;
 #define ORD_set_attr 2
-static u_long nr_need_overwrite_calls = 0;
-#define ORD_overwrite 3
 static u_long nr_write_calls = 0;
 #define ORD_write 4
 static u_long nr_system_calls = 0;
@@ -98,8 +96,6 @@ reg_sample_proc_show(struct seq_file *m, void *v)
                  nr_request_calls);
   seq_printf(m, "%lu calls to set_attr function.\n",
                  nr_set_attr_calls);
-  seq_printf(m, "%lu calls to need_overwrite function.\n",
-                 nr_need_overwrite_calls);
   seq_printf(m, "%lu calls to write function.\n",
                  nr_write_calls);
   seq_printf(m, "%lu calls to system_call function %lu, last arg was %p.\n",
@@ -181,15 +177,6 @@ static  int set_attr_func ( enum  rsbac_adf_request_t     request,
     return 0;
   }
 
-static rsbac_boolean_t need_overwrite_func (struct dentry * dentry_p)
-  {
-    __u32 ord = ORD_overwrite;
-
-    nr_need_overwrite_calls++;
-    rsbac_list_add(list_handle, &ord, &nr_need_overwrite_calls);
-    return FALSE;
-  }
-
 static int write_func(rsbac_boolean_t need_lock)
   {
     __u32 ord = ORD_write;
@@ -260,9 +247,6 @@ int init_module(void)
   ord = ORD_set_attr;
   if(rsbac_list_exist(list_handle, &ord))
     rsbac_list_get_data(list_handle, &ord, &nr_set_attr_calls);
-  ord = ORD_overwrite;
-  if(rsbac_list_exist(list_handle, &ord))
-    rsbac_list_get_data(list_handle, &ord, &nr_need_overwrite_calls);
   ord = ORD_write;
   if(rsbac_list_exist(list_handle, &ord))
     rsbac_list_get_data(list_handle, &ord, &nr_write_calls);
@@ -284,7 +268,6 @@ int init_module(void)
   entry.handle = handle;
   entry.request_func = request_func;
   entry.set_attr_func = set_attr_func;
-  entry.need_overwrite_func = need_overwrite_func;
   entry.write_func = write_func;
   entry.switch_on = TRUE;
 
