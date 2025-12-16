@@ -26,6 +26,8 @@
 #else
 #include <asm/unistd_32.h>
 #endif
+#define __NR_rsbac              400
+#define NR_SYSCALLS		401
 
 /* Bitmask values returned from kern_features system call.  */
 #define KERN_FEATURE_MIXED_MODE_STACK	0x00000001

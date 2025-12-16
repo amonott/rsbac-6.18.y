@@ -914,6 +914,10 @@ struct vm_area_struct {
 #ifdef __HAVE_PFNMAP_TRACKING
 	struct pfnmap_track_ctx *pfnmap_track_ctx;
 #endif
+
+#ifdef CONFIG_RSBAC_MPROTECT
+	__u8 rsbac_mprotect_once;
+#endif
 } __randomize_layout;
 
 #ifdef CONFIG_NUMA
