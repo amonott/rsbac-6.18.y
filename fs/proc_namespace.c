@@ -13,6 +13,8 @@
 #include <linux/fs_struct.h>
 #include <linux/sched/task.h>
 
+#include <rsbac/hooks.h>
+
 #include "proc/internal.h" /* only for get_proc_task() in ->open() */
 
 #include "pnode.h"
@@ -242,8 +244,31 @@ static int mounts_open_common(struct inode *inode, struct file *file,
 	struct seq_file *m;
 	int ret = -EINVAL;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (!task)
 		goto err;
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.process = get_task_pid(task, PIDTYPE_PID);
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_GET_STATUS_DATA,
+				task_pid(current),
+				T_PROCESS,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		put_pid(rsbac_target_id.process);
+		put_task_struct(task);
+		ret = -EPERM;
+		goto err;
+	}
+	put_pid(rsbac_target_id.process);
+#endif
 
 	task_lock(task);
 	nsp = task->nsproxy;

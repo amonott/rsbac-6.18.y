@@ -29,6 +29,10 @@
 
 #include "internal.h"
 
+#ifdef CONFIG_RSBAC
+#include <rsbac/hooks.h>
+#endif
+
 /*
  * Inode locking rules:
  *
@@ -1910,6 +1914,21 @@ static void iput_final(struct inode *inode)
 	if (!list_empty(&inode->i_lru))
 		inode_lru_list_del(inode);
 	spin_unlock(&inode->i_lock);
+
+#ifdef CONFIG_RSBAC
+	if (inode->i_rsbac_memfd) {
+		if (!rsbac_memfd_keep) {
+			union rsbac_target_id_t rsbac_target_id;
+
+			rsbac_pr_debug(memfd, "remove_target() for memfd %lu\n", (u_long) inode);
+			rsbac_target_id.ipc.type = I_memfd;
+			rsbac_target_id.ipc.id.id_nr = (u_long) inode;
+			rsbac_remove_target(T_IPC, &rsbac_target_id);
+		} else {
+			rsbac_pr_debug(memfd, "rsbac_memfd_keep is set, NOT calling remove_target() for memfd %u\n", inode->i_ino);
+		}
+	}
+#endif
 
 	evict(inode);
 }

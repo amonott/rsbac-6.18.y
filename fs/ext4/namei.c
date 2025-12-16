@@ -43,6 +43,9 @@
 #include "acl.h"
 
 #include <trace/events/ext4.h>
+
+#include <rsbac/hooks.h>
+
 /*
  * define how far ahead to read directories while searching them.
  */
@@ -3239,6 +3242,12 @@ int __ext4_unlink(struct inode *dir, const struct qstr *d_name,
 	if (!bh)
 		return -ENOENT;
 
+#ifdef DISABLED_CONFIG_RSBAC_SECDEL
+        if(inode->i_nlink == 1) {
+                rsbac_sec_del(dentry, TRUE);
+        }
+#endif
+
 	if (le32_to_cpu(de->inode) != inode->i_ino) {
 		/*
 		 * It's okay if we find dont find dentry which matches
@@ -3930,6 +3939,19 @@ static int ext4_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 		if (retval)
 			goto end_rename;
 	} else {
+
+#ifdef CONFIG_RSBAC_SECDEL
+		if(new.inode->i_nlink == 1) {
+			ext4_journal_stop(handle);
+			rsbac_sec_del(new.dentry, TRUE);
+			handle = ext4_journal_start(old.dir, EXT4_HT_DIR, credits);
+			if (IS_ERR(handle))
+				return PTR_ERR(handle);
+			if (IS_DIRSYNC(old.dir) || IS_DIRSYNC(new.dir))
+				ext4_handle_sync(handle);
+		}
+#endif
+
 		retval = ext4_setent(handle, &new,
 				     old.inode->i_ino, old_file_type);
 		if (retval)

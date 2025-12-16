@@ -11,6 +11,7 @@
 #define __NR_getpid	__NR_getxpid
 #define __NR_getuid	__NR_getxuid
 #define __NR_getgid	__NR_getxgid
+#define __NR_rsbac                      380
 
 #include <asm/unistd_32.h>
 

@@ -15,6 +15,8 @@
 #include <asm/desc.h>
 #include <asm/syscalls.h>
 
+#include <rsbac/hooks.h>
+
 #ifdef CONFIG_X86_IOPL_IOPERM
 
 static atomic64_t io_bitmap_sequence;
@@ -74,11 +76,31 @@ long ksys_ioperm(unsigned long from, unsigned long num, int turn_on)
 	unsigned int i, max_long;
 	struct io_bitmap *iobm;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t       rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if ((from + num <= from) || (from + num > IO_BITMAP_BITS))
 		return -EINVAL;
 	if (turn_on && (!capable(CAP_SYS_RAWIO) ||
 			security_locked_down(LOCKDOWN_IOPORT)))
 		return -EPERM;
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.scd = ST_ioports;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_MODIFY_PERMISSIONS_DATA,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value))
+	{
+		return -EPERM;
+	}
+#endif
 
 	/*
 	 * If it's the first ioperm() call in this thread's lifetime, set the
@@ -181,6 +203,11 @@ SYSCALL_DEFINE1(iopl, unsigned int, level)
 	struct thread_struct *t = &current->thread;
 	unsigned int old;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t       rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (level > 3)
 		return -EINVAL;
 
@@ -196,6 +223,21 @@ SYSCALL_DEFINE1(iopl, unsigned int, level)
 		    security_locked_down(LOCKDOWN_IOPORT))
 			return -EPERM;
 	}
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.scd = ST_ioports;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_MODIFY_PERMISSIONS_DATA,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value))
+	{
+		return -EPERM;
+	}
+#endif
 
 	t->iopl_emul = level;
 	task_update_io_bitmap();

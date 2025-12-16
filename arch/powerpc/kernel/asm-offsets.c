@@ -320,6 +320,10 @@ int main(void)
 	STACK_PT_REGS_OFFSET(_DSRR1, dsrr1);
 #endif
 
+#ifdef CONFIG_RSBAC
+	DEFINE(CLONE_KTHREAD, CLONE_KTHREAD);
+#endif
+
 	/* About the CPU features table */
 	OFFSET(CPU_SPEC_FEATURES, cpu_spec, cpu_features);
 	OFFSET(CPU_SPEC_SETUP, cpu_spec, cpu_setup);

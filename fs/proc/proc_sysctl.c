@@ -18,6 +18,9 @@
 #include <linux/mount.h>
 #include <linux/kmemleak.h>
 #include <linux/lockdep.h>
+
+#include <rsbac/hooks.h>
+
 #include "internal.h"
 
 #define list_for_each_table_entry(entry, header)	\
@@ -438,10 +441,31 @@ static int sysctl_perm(struct ctl_table_header *head, const struct ctl_table *ta
 	struct ctl_table_root *root = head->root;
 	int mode;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (root->permissions)
 		mode = root->permissions(head, table);
 	else
 		mode = table->mode;
+
+#ifdef CONFIG_RSBAC
+	if (op & 002) { /* write access */
+		rsbac_target_id.scd = ST_sysctl;
+		rsbac_attribute_value.mode = mode;
+		rsbac_pr_debug(aef, "[sysctl() etc.]: calling ADF\n");
+		if (!rsbac_adf_request(R_MODIFY_SYSTEM_DATA,
+					task_pid(current),
+					T_SCD,
+					rsbac_target_id,
+					A_mode,
+					rsbac_attribute_value)) {
+			return -EPERM;
+		}
+	}
+#endif
 
 	return test_perm(mode, op);
 }

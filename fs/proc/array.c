@@ -96,6 +96,8 @@
 #include <asm/processor.h>
 #include "internal.h"
 
+#include <rsbac/hooks.h>
+
 void proc_task_name(struct seq_file *m, struct task_struct *p, bool escape)
 {
 	char tcomm[64];
@@ -437,7 +439,32 @@ __weak void arch_proc_pid_thread_features(struct seq_file *m,
 int proc_pid_status(struct seq_file *m, struct pid_namespace *ns,
 			struct pid *pid, struct task_struct *task)
 {
-	struct mm_struct *mm = get_task_mm(task);
+	struct mm_struct *mm;
+
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.process = get_task_pid(task, PIDTYPE_PID);
+	if (rsbac_target_id.process) {
+		rsbac_attribute_value.dummy = 0;
+		if (!rsbac_adf_request(R_GET_STATUS_DATA,
+					task_pid(current),
+					T_PROCESS,
+					rsbac_target_id,
+					A_none,
+					rsbac_attribute_value)) {
+			put_pid(rsbac_target_id.process);
+			return -EPERM;
+		}
+		put_pid(rsbac_target_id.process);
+	}
+#endif
+
+	mm = get_task_mm(task);
 
 	seq_puts(m, "Name:\t");
 	proc_task_name(m, task, true);
@@ -482,6 +509,29 @@ static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 	int exit_code = task->exit_code;
 	struct signal_struct *sig = task->signal;
 	unsigned int seq = 1;
+
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.process = get_task_pid(task, PIDTYPE_PID);
+	if (rsbac_target_id.process) {
+		rsbac_attribute_value.dummy = 0;
+		if (!rsbac_adf_request(R_GET_STATUS_DATA,
+					task_pid(current),
+					T_PROCESS,
+					rsbac_target_id,
+					A_none,
+					rsbac_attribute_value))	{
+			put_pid(rsbac_target_id.process);
+			return -EPERM;
+		}
+		put_pid(rsbac_target_id.process);
+	}
+#endif
 
 	state = *get_task_state(task);
 	vsize = eip = esp = 0;
@@ -681,8 +731,32 @@ int proc_tgid_stat(struct seq_file *m, struct pid_namespace *ns,
 int proc_pid_statm(struct seq_file *m, struct pid_namespace *ns,
 			struct pid *pid, struct task_struct *task)
 {
-	struct mm_struct *mm = get_task_mm(task);
+	struct mm_struct *mm;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.process = get_task_pid(task, PIDTYPE_PID);
+	if (rsbac_target_id.process) {
+		rsbac_attribute_value.dummy = 0;
+		if (!rsbac_adf_request(R_GET_STATUS_DATA,
+					task_pid(current),
+					T_PROCESS,
+					rsbac_target_id,
+					A_none,
+					rsbac_attribute_value)) {
+			put_pid(rsbac_target_id.process);
+			return -EPERM;
+		}
+		put_pid(rsbac_target_id.process);
+	}
+#endif
+
+	mm = get_task_mm(task);
 	if (mm) {
 		unsigned long size;
 		unsigned long resident = 0;

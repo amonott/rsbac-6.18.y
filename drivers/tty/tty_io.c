@@ -111,6 +111,8 @@
 #include <linux/nsproxy.h>
 #include "tty.h"
 
+#include <rsbac/hooks.h>
+
 #undef TTY_DEBUG_HANGUP
 #ifdef TTY_DEBUG_HANGUP
 # define tty_debug_hangup(tty, f, args...)	tty_debug(tty, f, ##args)
@@ -2274,6 +2276,11 @@ static int tiocsti(struct tty_struct *tty, u8 __user *p)
 	struct tty_ldisc *ld;
 	u8 ch;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (!tty_legacy_tiocsti && !capable(CAP_SYS_ADMIN))
 		return -EIO;
 
@@ -2281,6 +2288,24 @@ static int tiocsti(struct tty_struct *tty, u8 __user *p)
 		return -EPERM;
 	if (get_user(ch, p))
 		return -EFAULT;
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.dev.type = D_char;
+	rsbac_target_id.dev.major = tty->driver->major;
+	rsbac_target_id.dev.minor = tty->driver->minor_start + tty->index;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_SEND,
+				task_pid(current),
+				T_DEV,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value))
+	{
+		return -EPERM;
+	}
+#endif
+
 	tty_audit_tiocsti(tty, ch);
 	ld = tty_ldisc_ref_wait(tty);
 	if (!ld)

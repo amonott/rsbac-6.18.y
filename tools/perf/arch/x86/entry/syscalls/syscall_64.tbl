@@ -194,7 +194,7 @@
 182	common	putpmsg
 183	common	afs_syscall
 184	common	tuxcall
-185	common	security
+185	common	rsbac			sys_rsbac
 186	common	gettid			sys_gettid
 187	common	readahead		sys_readahead
 188	common	setxattr		sys_setxattr

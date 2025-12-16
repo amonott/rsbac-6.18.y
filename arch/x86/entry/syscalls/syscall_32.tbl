@@ -235,7 +235,7 @@
 220	i386	getdents64		sys_getdents64
 221	i386	fcntl64			sys_fcntl64			compat_sys_fcntl64
 # 222 is unused
-# 223 is unused
+223	i386	rsbac			sys_rsbac
 224	i386	gettid			sys_gettid
 225	i386	readahead		sys_ia32_readahead
 226	i386	setxattr		sys_setxattr

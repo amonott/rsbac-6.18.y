@@ -18,6 +18,8 @@
 #include <linux/slab.h>
 #include <linux/fsnotify_backend.h>
 
+#include <rsbac/hooks.h>
+
 static int dir_notify_enable __read_mostly = 1;
 #ifdef CONFIG_SYSCTL
 static const struct ctl_table dnotify_sysctls[] = {
@@ -267,6 +269,11 @@ int fcntl_dirnotify(int fd, struct file *filp, unsigned int arg)
 	int destroy = 0, error = 0;
 	__u32 mask;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	/* we use these to tell if we need to kfree */
 	new_fsn_mark = NULL;
 	dn = NULL;
@@ -289,6 +296,23 @@ int fcntl_dirnotify(int fd, struct file *filp, unsigned int arg)
 		error = -ENOTDIR;
 		goto out_err;
 	}
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.file.device = filp->f_path.dentry->d_sb->s_dev;
+	rsbac_target_id.file.inode  = inode->i_ino;
+	rsbac_target_id.file.dentry_p = filp->f_path.dentry;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_TRACE,
+				task_pid(current),
+				T_DIR,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		error = -EPERM;
+		goto out_err;
+	}
+#endif
 
 	/*
 	 * convert the userspace DN_* "arg" to the internal FS_*

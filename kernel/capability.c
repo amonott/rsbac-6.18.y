@@ -20,6 +20,8 @@
 #include <linux/user_namespace.h>
 #include <linux/uaccess.h>
 
+#include <rsbac/hooks.h>
+
 int file_caps_enabled = 1;
 
 static int __init file_caps_disable(char *str)
@@ -107,20 +109,57 @@ static inline int cap_get_target_pid(pid_t pid, kernel_cap_t *pEp,
 {
 	int ret;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
+#ifdef CONFIG_RSBAC
+	rsbac_target_id.process = NULL;
+#endif
+
 	if (pid && (pid != task_pid_vnr(current))) {
+#ifdef CONFIG_RSBAC
+		struct task_struct *target;
+#else
 		const struct task_struct *target;
+#endif
 
 		rcu_read_lock();
 
 		target = find_task_by_vpid(pid);
 		if (!target)
 			ret = -ESRCH;
-		else
+		else {
 			ret = security_capget(target, pEp, pIp, pPp);
+#ifdef CONFIG_RSBAC
+			rsbac_target_id.process = get_task_pid(target, PIDTYPE_PID);
+#endif
+		}
 
 		rcu_read_unlock();
-	} else
+	} else {
 		ret = security_capget(current, pEp, pIp, pPp);
+#ifdef CONFIG_RSBAC
+		rsbac_target_id.process = get_task_pid(current, PIDTYPE_PID);
+#endif
+	}
+#ifdef CONFIG_RSBAC
+	if(!ret) {
+		rsbac_pr_debug(aef, "calling ADF\n");
+		rsbac_attribute_value.dummy = 0;
+		if(!rsbac_adf_request(R_GET_STATUS_DATA,
+					task_pid(current),
+					T_PROCESS,
+					rsbac_target_id,
+					A_none,
+					rsbac_attribute_value)) {
+			ret = -EPERM;
+		}
+	}
+	if (rsbac_target_id.process)
+		put_pid(rsbac_target_id.process);
+#endif
 
 	return ret;
 }
@@ -222,6 +261,12 @@ SYSCALL_DEFINE2(capset, cap_user_header_t, header, const cap_user_data_t, data)
 	int ret;
 	pid_t pid;
 
+#ifdef CONFIG_RSBAC
+     union rsbac_target_id_t rsbac_target_id;
+     union rsbac_target_id_t rsbac_new_target_id;
+     union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	ret = cap_validate_magic(header, &tocopy);
 	if (ret != 0)
 		return ret;
@@ -253,9 +298,47 @@ SYSCALL_DEFINE2(capset, cap_user_header_t, header, const cap_user_data_t, data)
 	if (ret < 0)
 		goto error;
 
+#ifdef CONFIG_RSBAC
+	if (!cap_issubset(effective, new->cap_effective)
+		     || !cap_issubset(permitted, new->cap_permitted)
+		     || !cap_issubset(inheritable, new->cap_inheritable)) {
+		rsbac_pr_debug(aef, "calling ADF\n");
+		rsbac_target_id.scd = ST_capability;
+		rsbac_attribute_value.dummy = 0;
+		if(!rsbac_adf_request(R_MODIFY_SYSTEM_DATA,
+					task_pid(current),
+					T_SCD,
+					rsbac_target_id,
+					A_none,
+					rsbac_attribute_value)) {
+		     ret = -EPERM;
+		     goto error;
+		}
+	}
+#endif
+
 	audit_log_capset(new, current_cred());
 
-	return commit_creds(new);
+	ret = commit_creds(new);
+
+#ifdef CONFIG_RSBAC
+	if (!ret) {
+		rsbac_new_target_id.dummy = 0;
+		if (unlikely(rsbac_adf_set_attr(R_MODIFY_SYSTEM_DATA,
+					task_pid(current),
+					T_SCD,
+					rsbac_target_id,
+					T_NONE,
+					rsbac_new_target_id,
+					A_none,
+					rsbac_attribute_value))) {
+			rsbac_printk(KERN_WARNING
+					"sys_setcap(): rsbac_adf_set_attr() returned error");
+		}
+	}
+#endif
+
+	return ret;
 
 error:
 	abort_creds(new);
@@ -344,7 +427,12 @@ static bool ns_capable_common(struct user_namespace *ns,
 		current->flags |= PF_SUPERPRIV;
 		return true;
 	}
+
+#if defined(CONFIG_RSBAC_CAP_LOG_MISSING) || defined(CONFIG_RSBAC_CAP_LEARN) || defined(CONFIG_RSBAC_JAIL_LOG_MISSING)
+	return rsbac_log_missing_cap(cap);
+#else
 	return false;
+#endif
 }
 
 /**
