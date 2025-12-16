@@ -61,6 +61,11 @@ grep -E "^[0-9]+[[:space:]]+$abis" "$infile" | {
 			exit 1
 		fi
 
+		if test -z "$CONFIG_RSBAC" -a "$name" = "rsbac"
+		then
+			continue
+		fi
+
 		while [ $nxt -lt $nr ]; do
 			echo "__SYSCALL($nxt, sys_ni_syscall)"
 			nxt=$((nxt + 1))

@@ -28,6 +28,8 @@
 
 #include <vdso/auxclock.h>
 
+#include <rsbac/hooks.h>
+
 #include "tick-internal.h"
 #include "ntp_internal.h"
 #include "timekeeping_internal.h"
@@ -2588,9 +2590,29 @@ static int timekeeping_validate_timex(const struct __kernel_timex *txc, bool aux
 		    !capable(CAP_SYS_TIME))
 			return -EPERM;
 	} else {
+
+#ifdef CONFIG_RSBAC
+		union rsbac_target_id_t rsbac_target_id;
+		union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 		/* In order to modify anything, you gotta be super-user! */
 		if (txc->modes && !capable(CAP_SYS_TIME))
 			return -EPERM;
+
+#ifdef CONFIG_RSBAC
+		rsbac_pr_debug(aef, "calling ADF\n");
+		rsbac_target_id.scd = ST_time_strucs;
+		rsbac_attribute_value.dummy = 0;
+		if (txc->modes && !rsbac_adf_request(R_MODIFY_SYSTEM_DATA,
+					task_pid(current),
+					T_SCD,
+					rsbac_target_id,
+					A_none,
+					rsbac_attribute_value))
+			return -EPERM;
+#endif
+
 		/*
 		 * if the quartz is off by more than 10% then
 		 * something is VERY wrong!

@@ -76,6 +76,8 @@ xfs_initxattrs(
 	return error;
 }
 
+#include <rsbac/hooks.h>
+
 /*
  * Hook in SELinux.  This is not quite correct yet, what we really need
  * here (as we do for default ACLs) is a mechanism by which creation of
@@ -408,6 +410,11 @@ xfs_vn_unlink(
 	struct xfs_name	name;
 	int		error;
 
+#ifdef CONFIG_RSBAC_SECDEL
+	if (dentry->d_inode->i_nlink == 1)
+		rsbac_sec_del(dentry, FALSE);
+#endif
+
 	xfs_dentry_to_name(&name, dentry);
 
 	error = xfs_remove(XFS_I(dir), &name, XFS_I(d_inode(dentry)));
@@ -480,6 +487,10 @@ xfs_vn_rename(
 	struct xfs_name	oname;
 	struct xfs_name	nname;
 
+#ifdef CONFIG_RSBAC_SECDEL
+	struct xfs_inode *cip;
+#endif
+
 	if (flags & ~(RENAME_NOREPLACE | RENAME_EXCHANGE | RENAME_WHITEOUT))
 		return -EINVAL;
 
@@ -495,6 +506,27 @@ xfs_vn_rename(
 					d_inode(odentry)->i_mode);
 	if (unlikely(error))
 		return error;
+
+#ifdef CONFIG_RSBAC_SECDEL
+	/* RSBAC secure delete code. in the event of overwritting existing
+	 * file with sec_del flag set, its blocks will be deallocated so we
+	 * have to overwrite their content. since XFS does all the necessary
+	 * checks on the layer below linux VFS, operating on vnodes
+	 * i decided to implement my own set of checks here, so we can see
+	 * if the existing file is being overwritten.
+	 * inspired by ext2/3/4 and jfs code. michal@rsbac.org
+	 */
+
+	if (new_inode) {
+		if (new_inode->i_nlink == 1) {
+			if (!xfs_lookup(XFS_I(ndir), &nname, &cip, NULL)) {
+				xfs_irele(cip);
+				if(!S_ISDIR(new_inode->i_mode))
+					rsbac_sec_del(ndentry, TRUE);
+			}
+		}
+	}
+#endif
 
 	return xfs_rename(idmap, XFS_I(odir), &oname,
 			  XFS_I(d_inode(odentry)), XFS_I(ndir), &nname,

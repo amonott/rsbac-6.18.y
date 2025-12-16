@@ -51,6 +51,11 @@
 
 #include "util.h"
 
+#include <rsbac/hooks.h>
+#if defined(CONFIG_RSBAC_MPROTECT)
+#include <rsbac/getname.h>
+#endif
+
 struct shmid_kernel /* private to the kernel */
 {
 	struct kern_ipc_perm	shm_perm;
@@ -332,6 +337,10 @@ static void shm_destroy(struct ipc_namespace *ns, struct shmid_kernel *shp)
 {
 	struct file *shm_file;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+#endif
+
 	shm_file = shp->shm_file;
 	shp->shm_file = NULL;
 	ns->shm_tot -= (shp->shm_segsz + PAGE_SIZE - 1) >> PAGE_SHIFT;
@@ -342,6 +351,14 @@ static void shm_destroy(struct ipc_namespace *ns, struct shmid_kernel *shp)
 	fput(shm_file);
 	ipc_update_pid(&shp->shm_cprid, NULL);
 	ipc_update_pid(&shp->shm_lprid, NULL);
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ACI remove_target()\n");
+	rsbac_target_id.ipc.type   = I_shm;
+	rsbac_target_id.ipc.id.id_nr  = shp->shm_perm.id;
+	rsbac_remove_target(T_IPC, &rsbac_target_id);
+#endif
+
 	ipc_rcu_putref(&shp->shm_perm, shm_rcu_free);
 }
 
@@ -372,6 +389,27 @@ static void __shm_close(struct shm_file_data *sfd)
 {
 	struct shmid_kernel *shp;
 	struct ipc_namespace *ns = sfd->ns;
+
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "[sys_shmdt() et al.]: calling ADF\n");
+	rsbac_target_id.ipc.type   = I_shm;
+	rsbac_target_id.ipc.id.id_nr  = sfd->id;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_CLOSE,
+				task_pid(current),
+				T_IPC,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		rsbac_printk(KERN_WARNING
+				"shm_close() [sys_shmdt() et al.]: rsbac_adf_request() for CLOSE returned NOT_GRANTED\n");
+	}
+#endif
 
 	down_write(&shm_ids(ns).rwsem);
 	/* remove from the list of attaches of the shm segment */
@@ -711,6 +749,12 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 	char name[13];
 	vm_flags_t acctflag = 0;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (size < SHMMIN || size > ns->shm_ctlmax)
 		return -EINVAL;
 
@@ -720,6 +764,21 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 	if (ns->shm_tot + numpages < ns->shm_tot ||
 			ns->shm_tot + numpages > ns->shm_ctlall)
 		return -ENOSPC;
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "[sys_shmget()]: calling ADF\n");
+	rsbac_target_id.ipc.type = I_shm;
+	rsbac_target_id.ipc.id.id_nr = 0;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_CREATE,
+				task_pid(current),
+				T_IPC,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	shp = kmalloc(sizeof(*shp), GFP_KERNEL_ACCOUNT);
 	if (unlikely(!shp))
@@ -798,6 +857,24 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 
 	ipc_unlock_object(&shp->shm_perm);
 	rcu_read_unlock();
+
+#ifdef CONFIG_RSBAC
+	rsbac_target_id.ipc.id.id_nr = file->f_path.dentry->d_inode->i_ino;
+	rsbac_new_target_id.ipc.type = I_shm;
+	rsbac_new_target_id.ipc.id.id_nr = file->f_path.dentry->d_inode->i_ino;
+	if (unlikely(rsbac_adf_set_attr(R_CREATE,
+				task_pid(current),
+				T_IPC,
+				rsbac_target_id,
+				T_IPC,
+				rsbac_new_target_id,
+				A_none,
+				rsbac_attribute_value))) {
+		rsbac_printk(KERN_WARNING
+				"newseg() [sys_shmget()]: rsbac_adf_set_attr() returned error");
+	}
+#endif
+
 	return error;
 
 no_id:
@@ -1245,6 +1322,12 @@ static long ksys_shmctl(int shmid, int cmd, struct shmid_ds __user *buf, int ver
 	struct ipc_namespace *ns;
 	struct shmid64_ds sem64;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+	union rsbac_target_id_t rsbac_new_target_id;
+#endif
+
 	if (cmd < 0 || shmid < 0)
 		return -EINVAL;
 
@@ -1282,9 +1365,45 @@ static long ksys_shmctl(int shmid, int cmd, struct shmid_ds __user *buf, int ver
 	case IPC_SET:
 		if (copy_shmid_from_user(&sem64, buf, version))
 			return -EFAULT;
-		fallthrough;
-	case IPC_RMID:
 		return shmctl_down(ns, shmid, cmd, &sem64);
+	case IPC_RMID:
+
+#ifdef CONFIG_RSBAC
+		rsbac_target_id.ipc.type = I_shm;
+		rsbac_target_id.ipc.id.id_nr = shmid;
+		rsbac_pr_debug(aef, "calling ADF\n");
+		rsbac_attribute_value.dummy = 0;
+		if (!rsbac_adf_request(R_DELETE,
+					task_pid(current),
+					T_IPC,
+					rsbac_target_id,
+					A_none,
+					rsbac_attribute_value)) {
+			return -EPERM;
+		}
+		err = shmctl_down(ns, shmid, cmd, &sem64);
+		if (!err) {
+	                rsbac_target_id.ipc.type = I_shm;
+			rsbac_target_id.ipc.id.id_nr = shmid;
+			rsbac_attribute_value.dummy = 0;
+			rsbac_new_target_id.dummy = 0;
+			if (unlikely(rsbac_adf_set_attr(R_DELETE,
+						task_pid(current),
+						T_IPC,
+						rsbac_target_id,
+						T_NONE,
+						rsbac_new_target_id,
+						A_none,
+						rsbac_attribute_value))) {
+				rsbac_printk(KERN_WARNING
+						"sys_shmctl(): rsbac_adf_set_attr() returned error");
+			}
+		}
+		return err;
+#else
+		return shmctl_down(ns, shmid, cmd, &sem64);
+#endif
+
 	case SHM_LOCK:
 	case SHM_UNLOCK:
 		return shmctl_do_lock(ns, shmid, cmd);
@@ -1532,6 +1651,13 @@ long do_shmat(int shmid, char __user *shmaddr, int shmflg,
 	int f_flags;
 	unsigned long populate = 0;
 
+#ifdef CONFIG_RSBAC
+	enum  rsbac_adf_request_t rsbac_request = R_NONE;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	err = -EINVAL;
 	if (shmid < 0)
 		goto out;
@@ -1573,6 +1699,22 @@ long do_shmat(int shmid, char __user *shmaddr, int shmflg,
 		acc_mode |= S_IXUGO;
 	}
 
+#ifdef CONFIG_RSBAC_MPROTECT
+	if (   (prot & PROT_EXEC)
+	    && (prot & PROT_WRITE)
+	    && !rsbac_write_exec_allowed(NULL, prot)
+	   ) {
+		char * program_name = rsbac_get_program_name();
+
+		rsbac_printk(KERN_INFO "do_shmat(): RSBAC mprotect: denied WRITE and EXEC, pid %u(%s)\n",
+				current->pid, program_name ? program_name : "(unknown)");
+		if (program_name)
+			rsbac_kfree(program_name);
+		err = -EPERM;
+		goto out;
+	}
+#endif
+
 	/*
 	 * We cannot rely on the fs check since SYSV IPC does have an
 	 * additional creator id...
@@ -1601,6 +1743,27 @@ long do_shmat(int shmid, char __user *shmaddr, int shmflg,
 		err = -EIDRM;
 		goto out_unlock;
 	}
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef,  "calling ADF\n");
+	if ((shmflg & SHM_RDONLY))
+		rsbac_request = R_READ_OPEN;
+	else
+		rsbac_request = R_READ_WRITE_OPEN;
+	rsbac_target_id.ipc.type   = I_shm;
+	rsbac_target_id.ipc.id.id_nr  = shp->shm_perm.id;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(rsbac_request,
+				task_pid(current),
+				T_IPC,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		ipc_unlock_object(&shp->shm_perm);
+		err = -EPERM;
+		goto out_unlock;
+	}
+#endif
 
 	/*
 	 * We need to take a reference to the real shm file to prevent the
@@ -1682,6 +1845,25 @@ out_nattch:
 	else
 		shm_unlock(shp);
 	up_write(&shm_ids(ns).rwsem);
+
+/* RSBAC: notify ADF of attached shm */
+#ifdef CONFIG_RSBAC
+	if(!err) {
+		rsbac_new_target_id.dummy = 0;
+		if (unlikely(rsbac_adf_set_attr(rsbac_request,
+					task_pid(current),
+					T_IPC,
+					rsbac_target_id,
+					T_NONE,
+					rsbac_new_target_id,
+					A_none,
+					rsbac_attribute_value))) {
+			rsbac_printk(KERN_WARNING
+					"sys_shmat(): rsbac_adf_set_attr() returned error");
+		}
+	}
+#endif
+
 	return err;
 
 out_unlock:

@@ -31,6 +31,8 @@
 #include <linux/uaccess.h>
 #include <linux/security.h>
 
+#include <rsbac/hooks.h>
+
 #define DEVMEM_MINOR	1
 #define DEVPORT_MINOR	4
 
@@ -88,6 +90,11 @@ static ssize_t read_mem(struct file *file, char __user *buf,
 	char *bounce;
 	int err;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t       rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (p != *ppos)
 		return 0;
 
@@ -129,6 +136,27 @@ static ssize_t read_mem(struct file *file, char __user *buf,
 			/* Show zeros for restricted memory. */
 			remaining = clear_user(buf, sz);
 		} else {
+
+#ifdef CONFIG_RSBAC
+			rsbac_attribute_value.pagenr = p >> PAGE_SHIFT;
+			if (rsbac_is_videomem(rsbac_attribute_value.pagenr, count))
+				rsbac_target_id.scd = ST_videomem;
+			else
+				rsbac_target_id.scd = ST_kmem;
+			rsbac_pr_debug(aef, "calling ADF\n");
+			if (!rsbac_adf_request(R_GET_STATUS_DATA,
+						task_pid(current),
+						T_SCD,
+						rsbac_target_id,
+						A_pagenr,
+						rsbac_attribute_value)) {
+				rsbac_printk(KERN_INFO "read_mem(): RSBAC denied read access to kernel mem page %u, size %u\n",
+						rsbac_attribute_value.pagenr, count);
+				err = -EPERM;
+				goto failed;
+			}
+#endif
+
 			/*
 			 * On ia64 if a page has been mapped somewhere as
 			 * uncached, then it must also be accessed uncached
@@ -174,6 +202,11 @@ static ssize_t write_mem(struct file *file, const char __user *buf,
 	unsigned long copied;
 	void *ptr;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t       rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (p != *ppos)
 		return -EFBIG;
 
@@ -205,6 +238,26 @@ static ssize_t write_mem(struct file *file, const char __user *buf,
 
 		/* Skip actual writing when a page is marked as restricted. */
 		if (allowed == 1) {
+
+#ifdef CONFIG_RSBAC
+			rsbac_attribute_value.pagenr = p >> PAGE_SHIFT;
+			if (rsbac_is_videomem(rsbac_attribute_value.pagenr, sz))
+				rsbac_target_id.scd = ST_videomem;
+			else
+				rsbac_target_id.scd = ST_kmem;
+			rsbac_pr_debug(aef, "calling ADF\n");
+			if (!rsbac_adf_request(R_MODIFY_SYSTEM_DATA,
+						task_pid(current),
+						T_SCD,
+						rsbac_target_id,
+						A_pagenr,
+						rsbac_attribute_value)) {
+				rsbac_printk(KERN_INFO "write_mem(): RSBAC denied write access to kernel mem page %u, size %u\n",
+						rsbac_attribute_value.pagenr, sz);
+				return -EPERM;
+			}
+#endif
+
 			/*
 			 * On ia64 if a page has been mapped somewhere as
 			 * uncached, then it must also be accessed uncached
@@ -327,6 +380,11 @@ static int mmap_mem(struct file *file, struct vm_area_struct *vma)
 	size_t size = vma->vm_end - vma->vm_start;
 	phys_addr_t offset = (phys_addr_t)vma->vm_pgoff << PAGE_SHIFT;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t       rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	/* Does it even fit in phys_addr_t? */
 	if (offset >> PAGE_SHIFT != vma->vm_pgoff)
 		return -EINVAL;
@@ -347,6 +405,25 @@ static int mmap_mem(struct file *file, struct vm_area_struct *vma)
 	if (!phys_mem_access_prot_allowed(file, vma->vm_pgoff, size,
 						&vma->vm_page_prot))
 		return -EINVAL;
+
+#ifdef CONFIG_RSBAC
+	rsbac_attribute_value.pagenr = vma->vm_pgoff;
+	if (rsbac_is_videomem(rsbac_attribute_value.pagenr, size))
+		rsbac_target_id.scd = ST_videomem;
+	else
+		rsbac_target_id.scd = ST_kmem;
+	rsbac_pr_debug(aef, "calling ADF\n");
+	if (!rsbac_adf_request(R_MODIFY_SYSTEM_DATA,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_pagenr,
+				rsbac_attribute_value)) {
+		rsbac_printk(KERN_INFO "mmap_mem(): RSBAC denied mmap access to kernel mem page %u, size %u\n",
+				rsbac_attribute_value.pagenr, size);
+		return -EPERM;
+	}
+#endif
 
 	vma->vm_page_prot = phys_mem_access_prot(file, vma->vm_pgoff,
 						 size,

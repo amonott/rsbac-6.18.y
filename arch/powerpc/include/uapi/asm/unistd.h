@@ -12,6 +12,8 @@
 
 #ifndef __powerpc64__
 #include <asm/unistd_32.h>
+/* RSBAC - we use 224, the old sys_security */
+#define __NR_rsbac              224
 #else
 #include <asm/unistd_64.h>
 #endif
