@@ -1,6 +1,6 @@
 #
 # RSBAC configuration
-# (c) 1999-2024 Amon Ott <ao@rsbac.org>
+# (c) 1999-2025 Amon Ott <ao@rsbac.org>
 #
 
 menuconfig RSBAC
@@ -2041,29 +2041,6 @@ endif
 
 menu 'Other RSBAC options'
 	depends on RSBAC
-
-config RSBAC_SECDEL
-	bool 'Support secure_delete'
-    depends on EXT2_FS || EXT3_FS || EXT4_FS || MSDOS_FS || VFAT_FS
-	help
-	  This option enables secure deletion and truncation of all files.
-	  The decision whether to overwrite is dispatched to all modules,
-	  if one says yes, the file is overwritten. Currently only FF
-	  supports this.
-
-	  FF returns yes, if file is marked with ff_flag secure_delete. This
-	  flag can, as usual, be inherited from parent dir, if flag
-	  add_inherited is set (default, if option 'Inherit as default' has
-	  been chosen).
-
-	  Secure deletion and truncation is currently done by overwriting once
-	  with zeros, because this is enough against hackers and standard level
-	  analysers. Against well-fed organisations who got hold of your disk
-	  there is no protection anyway.
-
-	  This mechanism is currently only supported for ext2, ext3, minix,
-	  msdos and vfat, but could be extended to other file systems, if
-	  needed.
 
 config RSBAC_RW
 	bool 'Intercept sys_read and sys_write'
