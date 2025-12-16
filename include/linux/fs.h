@@ -899,6 +899,9 @@ struct inode {
 	struct fsnotify_mark_connector __rcu	*i_fsnotify_marks;
 #endif
 
+#ifdef CONFIG_RSBAC
+	u8			i_rsbac_memfd;
+#endif
 	void			*i_private; /* fs or device private pointer */
 } __randomize_layout;
 
@@ -3552,6 +3555,11 @@ extern const struct file_operations generic_ro_fops;
 #define special_file(m) (S_ISCHR(m)||S_ISBLK(m)||S_ISFIFO(m)||S_ISSOCK(m))
 
 extern int readlink_copy(char __user *, int, const char *, int);
+
+#ifdef CONFIG_RSBAC_SYM_REDIR
+extern int rsbac_readlink_copy(char __user *, int, const char *, struct inode *);
+#endif
+
 extern int page_readlink(struct dentry *, char __user *, int);
 extern const char *page_get_link_raw(struct dentry *, struct inode *,
 				     struct delayed_call *);

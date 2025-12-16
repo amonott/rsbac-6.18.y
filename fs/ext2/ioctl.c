@@ -18,6 +18,11 @@
 #include <linux/uaccess.h>
 #include <linux/fileattr.h>
 
+#ifdef CONFIG_RSBAC
+#include <net/sock.h>
+#include <rsbac/hooks.h>
+#endif
+
 int ext2_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 {
 	struct ext2_inode_info *ei = EXT2_I(d_inode(dentry));
@@ -57,6 +62,66 @@ long ext2_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	struct ext2_inode_info *ei = EXT2_I(inode);
 	unsigned short rsv_window_size;
 	int ret;
+
+#ifdef CONFIG_RSBAC
+	enum  rsbac_adf_request_t rsbac_request;
+	enum  rsbac_target_t rsbac_target = T_NONE;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	switch (cmd) {
+		case EXT2_IOC_GETVERSION:
+		case EXT2_IOC_GETRSVSZ:
+			rsbac_request = R_GET_PERMISSIONS_DATA;
+			break;
+		case EXT2_IOC_SETVERSION:
+		case EXT2_IOC_SETRSVSZ:
+			rsbac_request = R_MODIFY_PERMISSIONS_DATA;
+			break;
+		default:
+			rsbac_request = R_NONE;
+	}
+	if(S_ISSOCK(inode->i_mode)) {
+		if(SOCKET_I(inode)->ops
+				&& (SOCKET_I(inode)->ops->family == AF_UNIX)) {
+			rsbac_target = T_UNIXSOCK;
+			rsbac_target_id.unixsock.device = filp->f_path.dentry->d_sb->s_dev;
+			rsbac_target_id.unixsock.inode  = inode->i_ino;
+			rsbac_target_id.unixsock.dentry_p = filp->f_path.dentry;
+		}
+#ifdef CONFIG_RSBAC_NET_OBJ
+		else {
+			rsbac_target = T_NETOBJ;
+			rsbac_target_id.netobj.sock_p
+				= SOCKET_I(inode);
+			rsbac_target_id.netobj.local_addr = NULL;
+			rsbac_target_id.netobj.local_len = 0;
+			rsbac_target_id.netobj.remote_addr = NULL;
+			rsbac_target_id.netobj.remote_len = 0;
+		}
+#endif
+	}
+	else {
+		rsbac_target = T_DEV;
+		rsbac_target_id.dev.type = D_block;
+		rsbac_target_id.dev.major = RSBAC_MAJOR(filp->f_path.dentry->d_sb->s_dev);
+		rsbac_target_id.dev.minor = RSBAC_MINOR(filp->f_path.dentry->d_sb->s_dev);
+	}
+	rsbac_attribute_value.ioctl_cmd = cmd;
+	if(   (rsbac_request != R_NONE)
+			&& !rsbac_adf_request(rsbac_request,
+				task_pid(current),
+				rsbac_target,
+				rsbac_target_id,
+				A_ioctl_cmd,
+				rsbac_attribute_value))
+	{
+		return -EPERM;
+	}
+#endif
 
 	ext2_debug ("cmd = %u, arg = %lu\n", cmd, arg);
 

@@ -238,7 +238,7 @@
 220	common	madvise			sys_madvise
 221	common	fcntl64			sys_fcntl64		sys_oabi_fcntl64
 # 222 for tux
-# 223 is unused
+223	common	rsbac			sys_rsbac
 224	common	gettid			sys_gettid
 225	common	readahead		sys_readahead		sys_oabi_readahead
 226	common	setxattr		sys_setxattr
