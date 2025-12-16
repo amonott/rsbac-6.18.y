@@ -1,9 +1,9 @@
 /*************************************************** */
 /* Rule Set Based Access Control                     */
 /* Implementation of RC data structures              */
-/* Author and (C) 1999-2024: Amon Ott <ao@rsbac.org> */
+/* Author and (C) 1999-2025: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 13/Dec/2024                        */
+/* Last modified: 16/Dec/2025                        */
 /*************************************************** */
 
 #include <linux/string.h>
@@ -3745,17 +3745,6 @@ int rsbac_rc_get_item(rsbac_list_ta_number_t ta_number,
 				    (char) 0;
 			}
 			return err;
-		case RI_type_fd_need_secdel:
-			if (!
-			    (err =
-			     rsbac_ta_list_get_data_ttl(ta_number,
-							type_fd_handle,
-							NULL, &tid.type,
-							&type_fd_entry))) {
-				value_p->need_secdel =
-				    type_fd_entry.need_secdel;
-			}
-			return err;
 		case RI_type_dev_name:
 			return rsbac_ta_list_get_data_ttl(ta_number,
 							  type_dev_handle,
@@ -4476,7 +4465,6 @@ int rsbac_rc_get_list(rsbac_list_ta_number_t ta_number,
 */
 		switch (item) {
 		case RI_type_fd_name:
-		case RI_type_fd_need_secdel:
 			if (array_pp)
 				return
 				    rsbac_ta_list_get_all_desc(ta_number,
@@ -5477,24 +5465,6 @@ int rsbac_rc_set_item(rsbac_list_ta_number_t ta_number,
 				strncpy(entry.name, value.name,
 					RSBAC_RC_NAME_LEN - 1);
 				entry.name[RSBAC_RC_NAME_LEN - 1] = 0;
-				return rsbac_ta_list_add_ttl(ta_number,
-							     type_fd_handle,
-							     0, &tid.type,
-							     &entry);
-			}
-		case RI_type_fd_need_secdel:
-			{
-				struct rsbac_rc_type_fd_entry_t entry;
-
-				err =
-				    rsbac_ta_list_get_data_ttl(ta_number,
-							       type_fd_handle,
-							       NULL,
-							       &tid.type,
-							       &entry);
-				if (err)
-					return err;
-				entry.need_secdel = value.need_secdel;
 				return rsbac_ta_list_add_ttl(ta_number,
 							     type_fd_handle,
 							     0, &tid.type,
