@@ -4,9 +4,9 @@
 /* Facility (ADF) - File Flags                       */
 /* File: rsbac/adf/ff/main.c                         */
 /*                                                   */
-/* Author and (c) 1999-2024: Amon Ott <ao@rsbac.org> */
+/* Author and (c) 1999-2025: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 28/Oct/2024                        */
+/* Last modified: 16/Dec/2025                        */
 /*************************************************** */
 
 #include <linux/types.h>
@@ -697,39 +697,5 @@ inline enum rsbac_adf_req_ret_t
 
     return result;
   } /* end of rsbac_adf_request_ff() */
-
-
-/******************************************/
-#ifdef CONFIG_RSBAC_SECDEL
-inline rsbac_boolean_t rsbac_need_overwrite_ff(struct dentry * dentry_p)
-  {
-    union rsbac_target_id_t       i_tid;
-    union rsbac_attribute_value_t i_attr_val1;
-
-    if(   !dentry_p
-       || !dentry_p->d_inode)
-      return FALSE;
-
-    i_tid.file.device = dentry_p->d_sb->s_dev;
-    i_tid.file.inode = dentry_p->d_inode->i_ino;
-    i_tid.file.dentry_p = dentry_p;
-    /* get target's file flags */
-    if (rsbac_get_attr(SW_FF, T_FILE,
-                       i_tid,
-                       A_ff_flags,
-                       &i_attr_val1,
-                       TRUE))
-      {
-        rsbac_printk(KERN_WARNING "rsbac_need_overwrite_ff(): rsbac_get_attr() returned error!\n");
-        return FALSE;
-      }
-
-    /* overwrite, if secure_delete is set */
-    if (i_attr_val1.ff_flags & FF_secure_delete)
-      return TRUE;
-    else
-      return FALSE;
-  }
-#endif
 
 /* end of rsbac/adf/ff/main.c */
