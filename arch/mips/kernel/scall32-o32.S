@@ -205,6 +205,9 @@ einval: li	v0, -ENOSYS
 	jr	ra
 	END(sys_syscall)
 
+#ifdef CONFIG_RSBAC
+	PTR	sys_rsbac
+#endif
 #ifdef CONFIG_MIPS_MT_FPAFF
 	/*
 	 * For FPU affinity scheduling on MIPS MT processors, we need to
