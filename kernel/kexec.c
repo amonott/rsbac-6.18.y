@@ -17,6 +17,8 @@
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
 
+#include <rsbac/hooks.h>
+
 #include "kexec_internal.h"
 
 static int kimage_alloc_init(struct kimage **rimage, unsigned long entry,
@@ -206,9 +208,28 @@ static inline int kexec_load_check(unsigned long nr_segments,
 			 KEXEC_TYPE_CRASH : KEXEC_TYPE_DEFAULT;
 	int result;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t	rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	/* We only trust the superuser with rebooting the system. */
 	if (!kexec_load_permitted(image_type))
 		return -EPERM;
+
+#ifdef CONFIG_RSBAC
+	rsbac_target_id.scd = ST_kexec;
+	rsbac_attribute_value.dummy = 0;
+	rsbac_pr_debug(aef, "calling ADF\n");
+	if(!rsbac_adf_request(R_MODIFY_SYSTEM_DATA,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	/* Permit LSMs and IMA to fail the kexec */
 	result = security_kernel_load_data(LOADING_KEXEC_IMAGE, false);

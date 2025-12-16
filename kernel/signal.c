@@ -59,6 +59,8 @@
 #include <asm/cacheflush.h>
 #include <asm/syscall.h>	/* for syscall_get_* */
 
+#include <rsbac/hooks.h>
+
 #include "time/posix-timers.h"
 
 /*
@@ -802,6 +804,12 @@ static int check_kill_permission(int sig, struct kernel_siginfo *info,
 	struct pid *sid;
 	int error;
 
+#ifdef CONFIG_RSBAC
+	enum  rsbac_adf_request_t rsbac_adf_req;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (!valid_signal(sig))
 		return -EINVAL;
 
@@ -828,6 +836,31 @@ static int check_kill_permission(int sig, struct kernel_siginfo *info,
 			return -EPERM;
 		}
 	}
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "check_kill_permission() [group_send_sig_info(), sys_tgkill(),sys_tkill()]: calling ADF\n");
+	rsbac_target_id.process = get_task_pid(t, PIDTYPE_PID);
+	rsbac_attribute_value.signal = sig;
+	if (sig)
+		rsbac_adf_req = R_SEND_SIGNAL;
+	else
+		rsbac_adf_req = R_GET_STATUS_DATA;
+	if ((!info || ((unsigned long)info != 1
+			&& (unsigned long)info != 2 && SI_FROMUSER(info)))
+			&& ((sig != SIGCONT) || (task_session(current) != task_session(t)))
+			&& !(t->flags & PF_EXITING)
+			&& !rsbac_adf_request(rsbac_adf_req,
+				task_pid(current),
+				T_PROCESS,
+				rsbac_target_id,
+				A_signal,
+				rsbac_attribute_value)
+	  ) {
+		put_pid(rsbac_target_id.process);
+		return -EPERM;
+        }
+	put_pid(rsbac_target_id.process);
+#endif
 
 	return security_task_kill(t, info, sig, NULL);
 }
