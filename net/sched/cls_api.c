@@ -43,6 +43,8 @@
 #include <net/flow_offload.h>
 #include <net/tc_wrapper.h>
 
+#include <rsbac/hooks.h>
+
 /* The list of all installed classifier types */
 static LIST_HEAD(tcf_proto_base);
 
@@ -2252,6 +2254,30 @@ static int tc_new_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
 	bool rtnl_held = false;
 	u32 flags;
 
+#ifdef CONFIG_RSBAC_NET
+	enum  rsbac_adf_request_t rsbac_request;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
+#ifdef CONFIG_RSBAC_NET
+	rsbac_pr_debug(aef, "calling ADF\n");
+	if (n->nlmsg_type == RTM_GETTFILTER)
+		rsbac_request = R_GET_STATUS_DATA;
+	else
+		rsbac_request = R_MODIFY_SYSTEM_DATA;
+	rsbac_target_id.scd = ST_network;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(rsbac_request,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
+
 replay:
 	tp_created = 0;
 
@@ -2776,6 +2802,25 @@ static bool tcf_chain_dump(struct tcf_chain *chain, struct Qdisc *q, u32 parent,
 	struct tcmsg *tcm = nlmsg_data(cb->nlh);
 	struct tcf_proto *tp, *tp_prev;
 	struct tcf_dump_args arg;
+
+#ifdef CONFIG_RSBAC_NET
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
+#ifdef CONFIG_RSBAC_NET
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.scd = ST_network;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_GET_STATUS_DATA,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	for (tp = __tcf_get_next_proto(chain, NULL);
 	     tp;

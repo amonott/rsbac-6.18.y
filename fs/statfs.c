@@ -11,6 +11,8 @@
 #include <linux/compat.h>
 #include "internal.h"
 
+#include <rsbac/hooks.h>
+
 static int flags_by_mnt(int mnt_flags)
 {
 	int flags = 0;
@@ -56,8 +58,29 @@ static int statfs_by_dentry(struct dentry *dentry, struct kstatfs *buf)
 {
 	int retval;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (!dentry->d_sb->s_op->statfs)
 		return -ENOSYS;
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.dev.type = D_block;
+	rsbac_target_id.dev.major = RSBAC_MAJOR(dentry->d_sb->s_dev);
+	rsbac_target_id.dev.minor = RSBAC_MINOR(dentry->d_sb->s_dev);
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_GET_STATUS_DATA,
+				task_pid(current),
+				T_DEV,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	memset(buf, 0, sizeof(*buf));
 	retval = security_sb_statfs(dentry);
