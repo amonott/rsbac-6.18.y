@@ -27,6 +27,8 @@
 #include <net/netfilter/nf_log.h>
 #include "../../netfilter/xt_repldata.h"
 
+#include <rsbac/hooks.h>
+
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Netfilter Core Team <coreteam@netfilter.org>");
 MODULE_DESCRIPTION("IPv4 packet filter");
@@ -1007,6 +1009,11 @@ get_entries(struct net *net, struct ipt_get_entries __user *uptr,
 	struct ipt_get_entries get;
 	struct xt_table *t;
 
+#ifdef CONFIG_RSBAC_NET
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (*len < sizeof(get))
 		return -EINVAL;
 	if (copy_from_user(&get, uptr, sizeof(get)) != 0)
@@ -1014,6 +1021,21 @@ get_entries(struct net *net, struct ipt_get_entries __user *uptr,
 	if (*len != sizeof(struct ipt_get_entries) + get.size)
 		return -EINVAL;
 	get.name[sizeof(get.name) - 1] = '\0';
+
+#ifdef CONFIG_RSBAC_NET
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.scd = ST_firewall;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_GET_STATUS_DATA,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value))
+	{
+		return -EPERM;
+	}
+#endif
 
 	t = xt_find_table_lock(net, AF_INET, get.name);
 	if (!IS_ERR(t)) {
@@ -1583,6 +1605,11 @@ compat_get_entries(struct net *net, struct compat_ipt_get_entries __user *uptr,
 	struct compat_ipt_get_entries get;
 	struct xt_table *t;
 
+#ifdef CONFIG_RSBAC_NET
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (*len < sizeof(get))
 		return -EINVAL;
 
@@ -1593,6 +1620,21 @@ compat_get_entries(struct net *net, struct compat_ipt_get_entries __user *uptr,
 		return -EINVAL;
 
 	get.name[sizeof(get.name) - 1] = '\0';
+
+#ifdef CONFIG_RSBAC_NET
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.scd = ST_firewall;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_GET_STATUS_DATA,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value))
+	{
+		return -EPERM;
+	}
+#endif
 
 	xt_compat_lock(AF_INET);
 	t = xt_find_table_lock(net, AF_INET, get.name);
@@ -1622,8 +1664,27 @@ do_ipt_set_ctl(struct sock *sk, int cmd, sockptr_t arg, unsigned int len)
 {
 	int ret;
 
+#ifdef CONFIG_RSBAC_NET
+        union rsbac_target_id_t rsbac_target_id;
+        union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (!ns_capable(sock_net(sk)->user_ns, CAP_NET_ADMIN))
 		return -EPERM;
+
+#ifdef CONFIG_RSBAC_NET
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.scd = ST_firewall;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_MODIFY_SYSTEM_DATA,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	switch (cmd) {
 	case IPT_SO_SET_REPLACE:

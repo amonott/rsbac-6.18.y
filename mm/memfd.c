@@ -22,6 +22,10 @@
 #include <uapi/linux/memfd.h>
 #include "swap.h"
 
+#ifdef CONFIG_RSBAC
+#include <rsbac/hooks.h>
+#endif
+
 /*
  * We need a tag: a new tag would expand every xa_node by 8 bytes,
  * so reuse a tag which we firmly believe is never set or cleared on tmpfs
@@ -461,6 +465,12 @@ static struct file *alloc_file(const char *name, unsigned int flags)
 	unsigned int *file_seals;
 	struct file *file;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (flags & MFD_HUGETLB) {
 		file = hugetlb_file_setup(name, 0, VM_NORESERVE,
 					HUGETLB_ANONHUGE_INODE,
@@ -471,6 +481,23 @@ static struct file *alloc_file(const char *name, unsigned int flags)
 	}
 	if (IS_ERR(file))
 		return file;
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "memfd_create(): calling ADF\n");
+	rsbac_target_id.ipc.type = I_memfd;
+	rsbac_target_id.ipc.id.id_nr = (u_long) file->f_inode;
+	rsbac_attribute_value.memfd_name = name;
+	if (!rsbac_adf_request(R_CREATE,
+				task_pid(current),
+				T_IPC,
+				rsbac_target_id,
+				A_memfd_name,
+				rsbac_attribute_value)) {
+		fput(file);
+		return ERR_PTR(-EPERM);
+	}
+#endif
+
 	file->f_mode |= FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE;
 	file->f_flags |= O_LARGEFILE;
 
@@ -489,6 +516,25 @@ static struct file *alloc_file(const char *name, unsigned int flags)
 		if (file_seals)
 			*file_seals &= ~F_SEAL_SEAL;
 	}
+
+#ifdef CONFIG_RSBAC
+	file->f_path.dentry->d_inode->i_rsbac_memfd = 1;
+	rsbac_target_id.ipc.type = I_memfd;
+	rsbac_target_id.ipc.id.id_nr = (u_long) file->f_inode;
+	rsbac_new_target_id.dummy = 0;
+	rsbac_pr_debug(memfd, "rsbac_adf_set_attr() for memfd %lu\n", rsbac_target_id.ipc.id.id_nr);
+	if (unlikely(rsbac_adf_set_attr(R_CREATE,
+				task_pid(current),
+				T_IPC,
+				rsbac_target_id,
+				T_NONE,
+				rsbac_new_target_id,
+				A_memfd_name,
+				rsbac_attribute_value))) {
+		rsbac_printk(KERN_WARNING
+				"memfd_create(): rsbac_adf_set_attr() returned error");
+	}
+#endif
 
 	return file;
 }

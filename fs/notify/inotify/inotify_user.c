@@ -32,6 +32,8 @@
 #include <linux/memcontrol.h>
 #include <linux/security.h>
 
+#include <rsbac/hooks.h>
+
 #include "inotify.h"
 #include "../fdinfo.h"
 
@@ -736,6 +738,12 @@ SYSCALL_DEFINE3(inotify_add_watch, int, fd, const char __user *, pathname,
 	int ret;
 	unsigned flags = 0;
 
+#ifdef CONFIG_RSBAC
+	enum  rsbac_target_t rsbac_target;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	/*
 	 * We share a lot of code with fs/dnotify.  We also share
 	 * the bit layout between inotify's IN_* and the fsnotify
@@ -777,6 +785,37 @@ SYSCALL_DEFINE3(inotify_add_watch, int, fd, const char __user *, pathname,
 	/* inode held in place by reference to path; group by fget on fd */
 	inode = path.dentry->d_inode;
 	group = fd_file(f)->private_data;
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target = T_FILE;
+	rsbac_target_id.file.device = path.dentry->d_sb->s_dev;
+	rsbac_target_id.file.inode  = inode->i_ino;
+	rsbac_target_id.file.dentry_p = path.dentry;
+	if (S_ISDIR(inode->i_mode))
+		rsbac_target = T_DIR;
+	else if (S_ISFIFO(inode->i_mode))
+		rsbac_target = T_FIFO;
+	else if (S_ISLNK(inode->i_mode))
+		rsbac_target = T_SYMLINK;
+	else if (S_ISSOCK(inode->i_mode))
+		rsbac_target = T_UNIXSOCK;
+	if (inode->i_rsbac_memfd) {
+		rsbac_target = T_IPC;
+		rsbac_target_id.ipc.type = I_memfd;
+		rsbac_target_id.ipc.id.id_nr = (u_long) inode;
+	}
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_TRACE,
+				task_pid(current),
+				rsbac_target,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		path_put(&path);
+		return -EPERM;
+	}
+#endif
 
 	/* create/update an inode mark */
 	ret = inotify_update_watch(group, inode, mask);

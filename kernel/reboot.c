@@ -19,6 +19,11 @@
 #include <linux/syscore_ops.h>
 #include <linux/uaccess.h>
 
+#ifdef CONFIG_RSBAC
+#include <linux/sched/rt.h>
+#include <rsbac/hooks.h>
+#endif
+
 /*
  * this indicates whether you can reboot with ctrl-alt-del: the default is yes
  */
@@ -732,6 +737,11 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 	char buffer[256];
 	int ret = 0;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	/* We only trust the superuser with rebooting the system. */
 	if (!ns_capable(pid_ns->user_ns, CAP_SYS_BOOT))
 		return -EPERM;
@@ -760,6 +770,20 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 		poweroff_fallback_to_halt = true;
 		cmd = LINUX_REBOOT_CMD_HALT;
 	}
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.dummy = 0;
+	rsbac_attribute_value.reboot_cmd = cmd;
+	if (!rsbac_adf_request(R_SHUTDOWN,
+				task_pid(current),
+				T_NONE,
+				rsbac_target_id,
+				A_reboot_cmd,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	mutex_lock(&system_transition_mutex);
 	switch (cmd) {

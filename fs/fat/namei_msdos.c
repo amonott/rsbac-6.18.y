@@ -9,6 +9,9 @@
 
 #include <linux/module.h>
 #include <linux/iversion.h>
+
+#include <rsbac/hooks.h>
+
 #include "fat.h"
 
 /* Characters that are undesirable in an MS-DOS file name */
@@ -422,6 +425,11 @@ static int msdos_unlink(struct inode *dir, struct dentry *dentry)
 	clear_nlink(inode);
 	fat_truncate_time(inode, NULL, S_CTIME);
 	fat_detach(inode);
+
+#ifdef CONFIG_RSBAC_SECDEL
+	rsbac_sec_del(dentry, TRUE);
+#endif
+
 out:
 	mutex_unlock(&MSDOS_SB(sb)->s_lock);
 	if (!err)
@@ -513,6 +521,11 @@ static int do_msdos_rename(struct inode *old_dir, unsigned char *old_name,
 		new_i_pos = sinfo.i_pos;
 	}
 	inode_inc_iversion(new_dir);
+
+#ifdef CONFIG_RSBAC_SECDEL
+        if (new_inode && (new_inode->i_nlink == 1))
+		rsbac_sec_del(new_dentry, TRUE);
+#endif
 
 	fat_detach(old_inode);
 	fat_attach(old_inode, new_i_pos);

@@ -506,6 +506,8 @@ out:
 	return ERR_PTR(-ENOBUFS);
 }
 
+#include <rsbac/hooks.h>
+
 #if defined(CONFIG_IP_PIMSM_V1) || defined(CONFIG_IP_PIMSM_V2)
 static netdev_tx_t reg_vif_xmit(struct sk_buff *skb, struct net_device *dev)
 {
@@ -1397,11 +1399,31 @@ int ip_mroute_setsockopt(struct sock *sk, int optname, sockptr_t optval,
 		goto out_unlock;
 	}
 	if (optname != MRT_INIT) {
+#ifdef CONFIG_RSBAC_NET_DEV
+		union rsbac_target_id_t rsbac_target_id;
+		union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 		if (sk != rcu_access_pointer(mrt->mroute_sk) &&
 		    !ns_capable(net->user_ns, CAP_NET_ADMIN)) {
 			ret = -EACCES;
 			goto out_unlock;
 		}
+
+#ifdef CONFIG_RSBAC_NET_DEV
+		rsbac_pr_debug(aef, "calling ADF\n");
+		rsbac_target_id.scd = ST_network;
+		rsbac_attribute_value.dummy = 0;
+		if (!rsbac_adf_request(R_GET_STATUS_DATA,
+					task_pid(current),
+					T_SCD,
+					rsbac_target_id,
+					A_none,
+					rsbac_attribute_value)) {
+			ret = -EPERM;
+			goto out_unlock;
+		}
+#endif
 	}
 
 	switch (optname) {

@@ -37,6 +37,9 @@
 #define CLONE_CLEAR_SIGHAND 0x100000000ULL /* Clear any signal handler and reset to SIG_DFL. */
 #define CLONE_INTO_CGROUP 0x200000000ULL /* Clone into a specific cgroup given the right permissions. */
 
+/* RSBAC */
+#define CLONE_KTHREAD           0x800000000ULL  /* clone a kernel thread */
+
 /*
  * cloning flags intersect with CSIGNAL so can be used with unshare and clone3
  * syscalls only:

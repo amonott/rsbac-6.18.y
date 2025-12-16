@@ -22,6 +22,9 @@ static void __used foo(void)
 
 	DEFINE(SP_OFF, offsetof(struct pt_regs, ps));
 	DEFINE(SIZEOF_PT_REGS, sizeof(struct pt_regs));
+#ifdef CONFIG_RSBAC
+	DEFINE(CLONE_KTHREAD, CLONE_KTHREAD);
+#endif
 	BLANK();
 
 	DEFINE(SWITCH_STACK_SIZE, sizeof(struct switch_stack));

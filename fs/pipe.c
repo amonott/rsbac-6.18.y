@@ -33,6 +33,8 @@
 
 #include "internal.h"
 
+#include <rsbac/hooks.h>
+
 /*
  * New pipe buffers will be restricted to this size while the user is exceeding
  * their pipe buffer quota. The general pipe use case needs at least two
@@ -274,9 +276,31 @@ anon_pipe_read(struct kiocb *iocb, struct iov_iter *to)
 	bool wake_writer = false, wake_next_reader = false;
 	ssize_t ret;
 
+#ifdef CONFIG_RSBAC_RW
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	/* Null read succeeds. */
 	if (unlikely(total_len == 0))
 		return 0;
+
+#ifdef CONFIG_RSBAC_RW
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.ipc.type = I_anonpipe;
+	rsbac_target_id.ipc.id.id_nr = filp->f_inode->i_ino;
+	rsbac_attribute_value.dummy = 0;
+
+	if (!rsbac_adf_request(R_READ,
+				task_pid(current),
+				T_IPC,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	ret = 0;
 	mutex_lock(&pipe->mutex);
@@ -400,6 +424,25 @@ anon_pipe_read(struct kiocb *iocb, struct iov_iter *to)
 	if (wake_next_reader)
 		wake_up_interruptible_sync_poll(&pipe->rd_wait, EPOLLIN | EPOLLRDNORM);
 	kill_fasync(&pipe->fasync_writers, SIGIO, POLL_OUT);
+
+#ifdef CONFIG_RSBAC_RW
+	if (ret > 0) {
+		rsbac_new_target_id.dummy = 0;
+
+		if (unlikely(rsbac_adf_set_attr(R_READ,
+					task_pid(current),
+					T_IPC,
+					rsbac_target_id,
+					T_NONE,
+					rsbac_new_target_id,
+					A_none,
+					rsbac_attribute_value))) {
+			rsbac_printk(KERN_WARNING
+					"pipe_readv(): rsbac_adf_set_attr() returned error\n");
+		}
+	}
+#endif
+
 	return ret;
 }
 
@@ -439,6 +482,12 @@ anon_pipe_write(struct kiocb *iocb, struct iov_iter *from)
 	bool was_empty = false;
 	bool wake_next_writer = false;
 
+#ifdef CONFIG_RSBAC_RW
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	/*
 	 * Reject writing to watch queue pipes before the point where we lock
 	 * the pipe.
@@ -454,6 +503,22 @@ anon_pipe_write(struct kiocb *iocb, struct iov_iter *from)
 	/* Null write succeeds. */
 	if (unlikely(total_len == 0))
 		return 0;
+
+#ifdef CONFIG_RSBAC_RW
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.ipc.type = I_anonpipe;
+	rsbac_target_id.ipc.id.id_nr = filp->f_inode->i_ino;
+	rsbac_attribute_value.dummy = 0;
+
+	if (!rsbac_adf_request(R_WRITE,
+				task_pid(current),
+				T_IPC,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	mutex_lock(&pipe->mutex);
 
@@ -597,6 +662,24 @@ out:
 	kill_fasync(&pipe->fasync_readers, SIGIO, POLL_IN);
 	if (wake_next_writer)
 		wake_up_interruptible_sync_poll(&pipe->wr_wait, EPOLLOUT | EPOLLWRNORM);
+
+#ifdef CONFIG_RSBAC_RW
+	if (ret > 0) {
+		rsbac_new_target_id.dummy = 0;
+		if (unlikely(rsbac_adf_set_attr(R_WRITE,
+					task_pid(current),
+					T_IPC,
+					rsbac_target_id,
+					T_NONE,
+					rsbac_new_target_id,
+					A_none,
+					rsbac_attribute_value))) {
+			rsbac_printk(KERN_WARNING
+					"pipe_writev(): rsbac_adf_set_attr() returned error\n");
+		}
+	}
+#endif
+
 	return ret;
 }
 
@@ -710,6 +793,10 @@ static void put_pipe_info(struct inode *inode, struct pipe_inode_info *pipe)
 {
 	int kill = 0;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+#endif
+
 	spin_lock(&inode->i_lock);
 	if (!--pipe->files) {
 		inode->i_pipe = NULL;
@@ -717,8 +804,16 @@ static void put_pipe_info(struct inode *inode, struct pipe_inode_info *pipe)
 	}
 	spin_unlock(&inode->i_lock);
 
-	if (kill)
+	if (kill) {
+#ifdef CONFIG_RSBAC
+		rsbac_pr_debug(aef, "calling ACI remove_target()\n");
+		rsbac_target_id.ipc.type = I_anonpipe;
+		rsbac_target_id.ipc.id.id_nr  = inode->i_ino;
+		rsbac_remove_target(T_IPC, &rsbac_target_id);
+#endif
+
 		free_pipe_info(pipe);
+	}
 }
 
 static int
@@ -929,8 +1024,31 @@ int create_pipe_files(struct file **res, int flags)
 	struct file *f;
 	int error;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (!inode)
 		return -ENFILE;
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "create_pipe_files() [sys_pipe()]: calling ADF\n");
+	rsbac_target_id.ipc.type = I_anonpipe;
+	rsbac_target_id.ipc.id.id_nr = inode->i_ino;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_CREATE,
+				task_pid(current),
+				T_IPC,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		free_pipe_info(inode->i_pipe);
+		iput(inode);
+		return -EPERM;
+	}
+#endif
 
 	if (flags & O_NOTIFICATION_PIPE) {
 		error = watch_queue_init(inode->i_pipe);
@@ -976,6 +1094,23 @@ int create_pipe_files(struct file **res, int flags)
 	 */
 	file_set_fsnotify_mode(res[0], FMODE_NONOTIFY_PERM);
 	file_set_fsnotify_mode(res[1], FMODE_NONOTIFY_PERM);
+
+#ifdef CONFIG_RSBAC
+	rsbac_new_target_id.dummy = 0;
+	rsbac_attribute_value.dummy = 0;
+	if (unlikely(rsbac_adf_set_attr(R_CREATE,
+				task_pid(current),
+				T_IPC,
+				rsbac_target_id,
+				T_NONE,
+				rsbac_new_target_id,
+				A_none,
+				rsbac_attribute_value))) {
+		rsbac_printk(KERN_WARNING
+				"do_pipe() [sys_pipe()]: rsbac_adf_set_attr() returned error");
+	}
+#endif
+
 	return 0;
 }
 
@@ -1124,7 +1259,46 @@ static int fifo_open(struct inode *inode, struct file *filp)
 	struct pipe_inode_info *pipe;
 	int ret;
 
+#ifdef CONFIG_RSBAC
+	enum rsbac_adf_request_t rsbac_request = R_NONE;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	filp->f_pipe = 0;
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	switch (filp->f_mode & (FMODE_READ | FMODE_WRITE)) {
+		case FMODE_READ:
+			rsbac_request = R_READ_OPEN;
+			break;
+
+		case FMODE_WRITE:
+			rsbac_request = R_WRITE_OPEN;
+			break;
+
+		case FMODE_READ | FMODE_WRITE:
+			rsbac_request = R_READ_WRITE_OPEN;
+			break;
+
+		default:
+			return -EINVAL;
+	}
+	rsbac_target_id.ipc.type = I_anonpipe;
+	rsbac_target_id.ipc.id.id_nr = inode->i_ino;
+	rsbac_attribute_value.dummy = 0;
+
+	if (!rsbac_adf_request(rsbac_request,
+				task_pid(current),
+				T_IPC,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	spin_lock(&inode->i_lock);
 	if (inode->i_pipe) {
@@ -1219,6 +1393,21 @@ static int fifo_open(struct inode *inode, struct file *filp)
 		ret = -EINVAL;
 		goto err;
 	}
+
+#ifdef CONFIG_RSBAC
+	rsbac_new_target_id.dummy = 0;
+
+	if (unlikely(!ret && rsbac_adf_set_attr(rsbac_request,
+				task_pid(current),
+				T_IPC,
+				rsbac_target_id,
+				T_NONE,
+				rsbac_new_target_id,
+				A_none,
+				rsbac_attribute_value))) {
+		rsbac_printk(KERN_WARNING "pipe_read_open(): rsbac_adf_set_attr() returned error\n");
+	}
+#endif
 
 	/* Ok! */
 	mutex_unlock(&pipe->mutex);

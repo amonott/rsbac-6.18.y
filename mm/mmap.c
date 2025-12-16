@@ -57,6 +57,11 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/mmap.h>
 
+#include <rsbac/hooks.h>
+#if defined(CONFIG_RSBAC_MPROTECT)
+#include <rsbac/getname.h>
+#endif
+
 #include "internal.h"
 
 #ifndef arch_mmap_check
@@ -340,12 +345,49 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	struct mm_struct *mm = current->mm;
 	int pkey = 0;
 
+#ifdef CONFIG_RSBAC
+	enum  rsbac_target_t rsbac_target = T_NONE;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	*populate = 0;
 
 	mmap_assert_write_locked(mm);
 
 	if (!len)
 		return -EINVAL;
+
+#ifdef CONFIG_RSBAC_MPROTECT
+	if ( (prot & PROT_EXEC) && (prot & PROT_WRITE) && !rsbac_write_exec_allowed(NULL, prot) ) {
+		char * program_name = rsbac_get_program_name();
+
+		if (file && file->f_path.dentry) {
+			char * help_name;
+
+#ifdef CONFIG_RSBAC_LOG_FULL_PATH
+			help_name = rsbac_kmalloc(CONFIG_RSBAC_MAX_PATH_LEN);
+			if (help_name) {
+				if (!(rsbac_get_full_path(file->f_path.dentry, help_name, CONFIG_RSBAC_MAX_PATH_LEN - 1) > 0))
+					strcpy(help_name, "(unknown)");
+			}
+#else
+			help_name = file->f_path.dentry->d_name.name;
+#endif
+			rsbac_printk(KERN_INFO "do_mmap() [sys_mmap()]: RSBAC mprotect: denied WRITE and EXEC to %s, pid %u(%s)\n",
+					help_name ? help_name : "(unknown)", current->pid, program_name ? program_name : "(unknown)");
+#ifdef CONFIG_RSBAC_LOG_FULL_PATH
+			if (help_name)
+				rsbac_kfree(help_name);
+#endif
+		} else
+			rsbac_printk(KERN_INFO "do_mmap() [sys_mmap()]: RSBAC mprotect: denied WRITE and EXEC, pid %u(%s)\n",
+					current->pid, program_name ? program_name : "(unknown)");
+		if (program_name)
+			rsbac_kfree(program_name);
+		return -EPERM;
+	}
+#endif
 
 	/*
 	 * Does the application expect PROT_READ to imply PROT_EXEC?
@@ -554,6 +596,38 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 		if (file && is_file_hugepages(file))
 			vm_flags |= VM_NORESERVE;
 	}
+
+#ifdef CONFIG_RSBAC
+	if (prot & PROT_EXEC) {
+		rsbac_pr_debug(aef, "[do_mmap() [sys_mmap()]]: calling ADF\n");
+		if (file) {
+			if (file->f_path.dentry->d_inode->i_rsbac_memfd) {
+				rsbac_target = T_IPC;
+				rsbac_target_id.ipc.type = I_memfd;
+				rsbac_target_id.ipc.id.id_nr = (u_long) file->f_path.dentry->d_inode;
+			} else {
+				rsbac_target = T_FILE;
+				rsbac_target_id.file.device = file->f_path.dentry->d_inode->i_sb->s_dev;
+				rsbac_target_id.file.inode  = file->f_path.dentry->d_inode->i_ino;
+				rsbac_target_id.file.dentry_p = file->f_path.dentry;
+			}
+		} else {
+			rsbac_target = T_NONE;
+			rsbac_target_id.dummy = 0;
+		}
+		rsbac_attribute_value.prot_bits = prot;
+		if (!rsbac_adf_request(R_MAP_EXEC,
+					task_pid(current),
+					rsbac_target,
+					rsbac_target_id,
+					A_prot_bits,
+					rsbac_attribute_value)) {
+			rsbac_pr_debug(aef, "[do_mmap() [sys_mmap()]]: request not granted, my PID: %i\n",
+					current->pid);
+			return -EPERM;
+		}
+	}
+#endif
 
 	addr = mmap_region(file, addr, len, vm_flags, pgoff, uf);
 	if (!IS_ERR_VALUE(addr) &&
