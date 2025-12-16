@@ -1,9 +1,9 @@
 /************************************ */
 /* Rule Set Based Access Control      */
-/* Author and (c) 1999-2020: Amon Ott */
+/* Author and (c) 1999-2025: Amon Ott */
 /* API: for REG                       */
 /*      Module Registration           */
-/* Last modified: 27/Mar/2020         */
+/* Last modified: 16/Dec/2025         */
 /************************************ */
 
 #ifndef __RSBAC_REG_H
@@ -42,9 +42,6 @@ typedef \
                                      union rsbac_attribute_value_t,
                                            rsbac_uid_t); /* process owner */
 
-/* Whether module wants this file to be overwritten on delete / truncate */
-typedef rsbac_boolean_t rsbac_reg_need_overwrite_func_t(struct dentry * dentry_p);
-
 /*
  * rsbac_reg_write_func_t
  *
@@ -80,7 +77,6 @@ struct rsbac_reg_entry_t
     char                              name[RSBAC_REG_NAME_LEN+1];
     rsbac_reg_request_func_t        * request_func;
     rsbac_reg_set_attr_func_t       * set_attr_func;
-    rsbac_reg_need_overwrite_func_t * need_overwrite_func;
     rsbac_reg_write_func_t          * write_func;
     rsbac_reg_mount_func_t          * mount_func;
     rsbac_reg_umount_func_t         * umount_func;
