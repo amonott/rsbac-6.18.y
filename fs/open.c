@@ -52,9 +52,6 @@ int do_truncate(struct mnt_idmap *idmap, struct dentry *dentry,
 	union rsbac_target_id_t rsbac_target_id;
 	union rsbac_target_id_t rsbac_new_target_id;
 	union rsbac_attribute_value_t rsbac_attribute_value;
-#ifdef CONFIG_RSBAC_SECDEL
-	loff_t old_len = dentry->d_inode->i_size;
-#endif
 #endif
 
 	/* Not pretty: "inode->i_size" shouldn't really be signed. But it is. */
@@ -82,11 +79,6 @@ int do_truncate(struct mnt_idmap *idmap, struct dentry *dentry,
 				rsbac_attribute_value)) {
 		return -EPERM;
 	}
-#endif
-
-	/* RSBAC: Overwrite truncated part, if asked by flag */
-#ifdef CONFIG_RSBAC_SECDEL
-	rsbac_sec_trunc(dentry, length, old_len);
 #endif
 
 	newattrs.ia_size = length;
