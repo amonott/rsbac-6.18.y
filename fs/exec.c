@@ -78,6 +78,8 @@
 
 #include <trace/events/sched.h>
 
+#include <rsbac/hooks.h>
+
 /* For vma exec functions. */
 #include "../mm/internal.h"
 
@@ -1731,6 +1733,12 @@ static int bprm_execve(struct linux_binprm *bprm)
 {
 	int retval;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	retval = prepare_bprm_creds(bprm);
 	if (retval)
 		return retval;
@@ -1751,9 +1759,47 @@ static int bprm_execve(struct linux_binprm *bprm)
 	if (retval || bprm->is_check)
 		goto out;
 
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "[sys_execve()]: calling ADF\n");
+	rsbac_target_id.file.device = bprm->file->f_path.dentry->d_sb->s_dev;
+	rsbac_target_id.file.inode  = bprm->file->f_path.dentry->d_inode->i_ino;
+	rsbac_target_id.file.dentry_p = bprm->file->f_path.dentry;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_EXECUTE,
+				task_pid(current),
+				T_FILE,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		rsbac_pr_debug(aef, "[sys_execve()]: request not granted, my PID: %i\n",
+				task_pid(current));
+		retval = -EPERM;
+		goto out;
+	}
+#endif
+
 	retval = exec_binprm(bprm);
 	if (retval < 0)
 		goto out;
+
+/* RSBAC: notify ADF of changed program in this process
+ * Most structures are already filled
+ */
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "[sys_execve()]: calling ADF_set_attr\n");
+	rsbac_new_target_id.dummy = 0;
+	if (unlikely(rsbac_adf_set_attr(R_EXECUTE,
+					task_pid(current),
+					T_FILE,
+					rsbac_target_id,
+					T_NONE,
+					rsbac_new_target_id,
+					A_none,
+					rsbac_attribute_value))) {
+		rsbac_printk(KERN_WARNING
+			"do_execve() [sys_execve]: rsbac_adf_set_attr() returned error\n");
+	}
+#endif
 
 	sched_mm_cid_after_execve(current);
 	rseq_execve(current);
