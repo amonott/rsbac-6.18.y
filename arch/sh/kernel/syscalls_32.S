@@ -15,3 +15,6 @@
 ENTRY(sys_call_table)
 #include <asm/syscall_table.h>
 #undef __SYSCALL
+#ifdef CONFIG_RSBAC
+        .long sys_rsbac
+#endif

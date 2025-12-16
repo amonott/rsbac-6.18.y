@@ -1173,6 +1173,14 @@ export	INSTALL_PATH ?= /boot
 export INSTALL_DTBS_PATH ?= $(INSTALL_PATH)/dtbs/$(KERNELRELEASE)
 
 #
+
+# Add RSBAC version
+ifeq ($(CONFIG_RSBAC),y)
+EXTRAVERSION:=$(EXTRAVERSION)-rsbac
+core-y		+= rsbac/
+export CONFIG_RSBAC = true
+endif
+
 # INSTALL_MOD_PATH specifies a prefix to MODLIB for module directory
 # relocations required by build roots.  This is not defined in the
 # makefile but the argument can be passed to make if needed.

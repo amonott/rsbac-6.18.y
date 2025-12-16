@@ -26,6 +26,8 @@
 #include <linux/mm_inline.h>
 #include <linux/secretmem.h>
 
+#include <rsbac/hooks.h>
+
 #include "internal.h"
 
 struct mlock_fbatch {
@@ -615,10 +617,30 @@ static __must_check int do_mlock(unsigned long start, size_t len, vm_flags_t fla
 	unsigned long lock_limit;
 	int error = -ENOMEM;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	start = untagged_addr(start);
 
 	if (!can_do_mlock())
 		return -EPERM;
+
+#ifdef CONFIG_RSBAC
+	rsbac_target_id.scd = ST_mlock;
+	rsbac_attribute_value.dummy = 0;
+	rsbac_pr_debug(aef, "calling ADF\n");
+	if (!rsbac_adf_request(R_MODIFY_SYSTEM_DATA,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value))
+	{
+		return -EPERM;
+	}
+#endif
 
 	len = PAGE_ALIGN(len + (offset_in_page(start)));
 	start &= PAGE_MASK;
@@ -747,12 +769,31 @@ SYSCALL_DEFINE1(mlockall, int, flags)
 	unsigned long lock_limit;
 	int ret;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (!flags || (flags & ~(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT)) ||
 	    flags == MCL_ONFAULT)
 		return -EINVAL;
 
 	if (!can_do_mlock())
 		return -EPERM;
+
+#ifdef CONFIG_RSBAC
+	rsbac_target_id.scd = ST_mlock;
+	rsbac_attribute_value.dummy = 0;
+	rsbac_pr_debug(aef, "calling ADF\n");
+	if (!rsbac_adf_request(R_MODIFY_SYSTEM_DATA,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	lock_limit = rlimit(RLIMIT_MEMLOCK);
 	lock_limit >>= PAGE_SHIFT;
