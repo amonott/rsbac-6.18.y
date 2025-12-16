@@ -1,7 +1,7 @@
 /*
  * RSBAC REG decision module sample2
  *
- * Author and (c) 1999-2024 Amon Ott <ao@rsbac.org>
+ * Author and (c) 1999-2025 Amon Ott <ao@rsbac.org>
  */
 
 /* general stuff */
@@ -24,7 +24,6 @@
 
 static u_long nr_request_calls = 0;
 static u_long nr_set_attr_calls = 0;
-static u_long nr_need_overwrite_calls = 0;
 static rsbac_boolean_t no_write = FALSE;
 static u_long nr_system_calls = 0;
 static void * system_call_arg = 0;
@@ -85,8 +84,6 @@ adf_sample_proc_show(struct seq_file *m, void *v)
                  nr_request_calls);
   seq_printf(m, "%lu calls to set_attr function.\n",
                  nr_set_attr_calls);
-  seq_printf(m, "%lu calls to need_overwrite function.\n",
-                 nr_need_overwrite_calls);
   seq_printf(m, "%lu calls to system_call function %lu, last arg was %p.\n",
                  nr_system_calls,
                  syscall_dispatcher_handle,
@@ -189,19 +186,6 @@ static int read_info(void)
       }
     nr_set_attr_calls = tmpval;
 
-    /* read nr_need_overwrite_calls */
-    tmperr = rsbac_read_file(file_fd,
-                        (char *) &tmpval,
-                        sizeof(tmpval));
-    if (tmperr < sizeof(tmpval))
-      {
-        rsbac_printk(KERN_WARNING "%s\n",
-               "read_info(): read error from file!");
-        err = -RSBAC_EREADFAILED;
-        goto end_read;
-      }
-    nr_need_overwrite_calls = tmpval;
-
 end_read:
     /* We do not need this file any more */
     rsbac_read_close(file_fd);
@@ -270,18 +254,6 @@ static int write_info(void)
         goto end_write;
       }
 
-    tmperr = rsbac_write_file(file_fd,
-                         (char *) &nr_need_overwrite_calls,
-                         sizeof(nr_need_overwrite_calls));
-    if (tmperr < sizeof(nr_need_overwrite_calls))
-      {
-        rsbac_printk(KERN_WARNING
-               "write_info(): write error %i on file!\n",
-               tmperr);
-        err = -RSBAC_EWRITEFAILED;
-        goto end_write;
-      }
-
 end_write:
     /* End of write access */
     rsbac_write_close(file_fd);
@@ -319,12 +291,6 @@ static  int set_attr_func ( enum  rsbac_adf_request_t     request,
     if(request != R_SEARCH)
       nr_set_attr_calls++;
     return 0;
-  }
-
-static rsbac_boolean_t need_overwrite_func (struct dentry * dentry_p)
-  {
-    nr_need_overwrite_calls++;
-    return FALSE;
   }
 
 static int write_func(rsbac_boolean_t need_lock)
@@ -377,7 +343,6 @@ int init_module(void)
   entry.handle = handle;
   entry.request_func = request_func;
   entry.set_attr_func = set_attr_func;
-  entry.need_overwrite_func = need_overwrite_func;
   entry.write_func = write_func;
   entry.switch_on = TRUE;
 
