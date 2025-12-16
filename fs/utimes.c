@@ -9,6 +9,8 @@
 #include <asm/unistd.h>
 #include <linux/filelock.h>
 
+#include <rsbac/hooks.h>
+
 static bool nsec_valid(long nsec)
 {
 	if (nsec == UTIME_OMIT || nsec == UTIME_NOW)
@@ -23,6 +25,12 @@ int vfs_utimes(const struct path *path, struct timespec64 *times)
 	struct iattr newattrs;
 	struct inode *inode = path->dentry->d_inode;
 	struct inode *delegated_inode = NULL;
+
+#ifdef CONFIG_RSBAC
+	enum  rsbac_target_t rsbac_target;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
 
 	if (times) {
 		if (!nsec_valid(times[0].tv_nsec) ||
@@ -61,6 +69,34 @@ int vfs_utimes(const struct path *path, struct timespec64 *times)
 	} else {
 		newattrs.ia_valid |= ATTR_TOUCH;
 	}
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target = T_FILE;
+	if (S_ISDIR(inode->i_mode))
+		rsbac_target = T_DIR;
+	else if (S_ISFIFO(inode->i_mode))
+		rsbac_target = T_FIFO;
+	else if (S_ISLNK(inode->i_mode))
+		rsbac_target = T_SYMLINK;
+	else if (S_ISSOCK(inode->i_mode))
+		rsbac_target = T_UNIXSOCK;
+	rsbac_target_id.file.device = inode->i_sb->s_dev;
+	rsbac_target_id.file.inode  = inode->i_ino;
+	rsbac_target_id.file.dentry_p = path->dentry;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_MODIFY_ACCESS_DATA,
+				task_pid(current),
+				rsbac_target,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		error = -EPERM;
+		mnt_drop_write(path->mnt);
+		goto out;
+	}
+#endif
+
 retry_deleg:
 	inode_lock(inode);
 	error = notify_change(mnt_idmap(path->mnt), path->dentry, &newattrs,

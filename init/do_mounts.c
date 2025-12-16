@@ -28,6 +28,14 @@
 
 #include "do_mounts.h"
 
+#ifdef CONFIG_RSBAC
+#include <rsbac/aci.h>
+#include <rsbac/debug.h>
+#ifdef CONFIG_BLK_DEV_INITRD
+#include <linux/initrd.h>
+#endif
+#endif
+
 int root_mountflags = MS_RDONLY | MS_SILENT;
 static char __initdata saved_root_name[64];
 static int root_wait;
@@ -493,6 +501,14 @@ out:
 	devtmpfs_mount();
 	init_mount(".", "/", NULL, MS_MOVE, NULL);
 	init_chroot(".");
+
+#ifdef CONFIG_RSBAC
+#ifdef CONFIG_RSBAC_INIT_DELAY
+        if(rsbac_no_delay_init)
+#endif
+        rsbac_init(ROOT_DEV);
+#endif
+
 }
 
 static bool is_tmpfs;
