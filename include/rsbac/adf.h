@@ -1,10 +1,10 @@
 /******************************* */
 /* Rule Set Based Access Control */
-/* Author and (c) 1999-2024:     */
+/* Author and (c) 1999-2025:     */
 /*   Amon Ott <ao@rsbac.org>     */
 /* API: for Access Control       */
 /* Decision Facility             */
-/* Last modified: 21/Aug/2024    */
+/* Last modified: 16/Dec/2025    */
 /******************************* */
 
 #ifndef __RSBAC_ADF_H
@@ -82,11 +82,6 @@ extern  int  rsbac_adf_set_attr(     enum  rsbac_adf_request_t,
 
 #include <linux/types.h>
 #include <linux/dcache.h>
-
-int rsbac_sec_del(struct dentry * dentry_p, u_int may_sync);
-
-int rsbac_sec_trunc(struct dentry * dentry_p,
-                    loff_t new_len, loff_t old_len);
 
 /* This function changes the symlink content by adding a suffix, if
  * requested. It returns NULL, if unchanged, or a pointer to a

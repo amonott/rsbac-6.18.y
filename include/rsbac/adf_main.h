@@ -1,10 +1,10 @@
 /************************************ */
 /* Rule Set Based Access Control      */
-/* Author and (c) 1999-2020:          */
+/* Author and (c) 1999-2025:          */
 /*   Amon Ott <ao@rsbac.org>          */
 /* Data Structs etc. for Access       */
 /* Control Decision Facility          */
-/* Last modified: 22/Apr/2020         */
+/* Last modified: 16/Dec/2025         */
 /************************************ */
 
 #ifndef __RSBAC_ADF_MAIN_H
@@ -15,10 +15,6 @@
 
 #if defined(CONFIG_RSBAC_REG)
 #include <rsbac/reg.h>
-#endif
-
-#ifdef CONFIG_RSBAC_SECDEL
-#include <linux/dcache.h>
 #endif
 
 /***************************************************/
@@ -436,10 +432,6 @@ extern  int  rsbac_adf_set_attr_ff ( enum  rsbac_adf_request_t,
                                      union rsbac_attribute_value_t,
                                            rsbac_uid_t); /* process owner */
 
-#ifdef CONFIG_RSBAC_SECDEL
-extern rsbac_boolean_t rsbac_need_overwrite_ff(struct dentry * dentry_p);
-#endif
-
 #endif  /* FF */
  
 /******* RC ********/
@@ -468,10 +460,6 @@ extern  int  rsbac_adf_set_attr_rc ( enum  rsbac_adf_request_t,
                                      union rsbac_attribute_value_t,
                                            rsbac_uid_t); /* process owner */
 
-/* Secure delete/truncate for this module */
-#ifdef CONFIG_RSBAC_SECDEL
-extern rsbac_boolean_t rsbac_need_overwrite_rc(struct dentry * dentry_p);
-#endif
 #endif  /* RC */
 
 /****** AUTH *******/
@@ -612,12 +600,6 @@ extern  int  rsbac_adf_set_attr_res (enum  rsbac_adf_request_t,
                                      union rsbac_attribute_value_t,
                                            rsbac_uid_t); /* process owner */
 
-#ifdef CONFIG_RSBAC_SECDEL
-extern inline rsbac_boolean_t rsbac_need_overwrite_res(struct dentry * dentry_p)
-  {
-    return FALSE;
-  }
-#endif
 #endif /* RES */
 
 /******* UDF ********/
@@ -670,12 +652,6 @@ extern  int  rsbac_adf_set_attr_reg (enum  rsbac_adf_request_t,
                                      union rsbac_attribute_value_t,
                                            rsbac_uid_t); /* process owner */
 
-#ifdef CONFIG_RSBAC_SECDEL
-extern inline rsbac_boolean_t rsbac_need_overwrite_reg(struct dentry * dentry_p)
-  {
-    return FALSE;
-  }
-#endif
 #endif /* REG */
 
 #ifdef CONFIG_RSBAC_MPROTECT
