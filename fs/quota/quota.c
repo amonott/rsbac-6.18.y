@@ -24,9 +24,16 @@
 #include "compat.h"
 #include "../internal.h"
 
+#include <rsbac/hooks.h>
+
 static int check_quotactl_permission(struct super_block *sb, int type, int cmd,
 				     qid_t id)
 {
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	switch (cmd) {
 	/* these commands do not require any special privilegues */
 	case Q_GETFMT:
@@ -35,17 +42,64 @@ static int check_quotactl_permission(struct super_block *sb, int type, int cmd,
 	case Q_XGETQSTAT:
 	case Q_XGETQSTATV:
 	case Q_XQUOTASYNC:
+
+#ifdef CONFIG_RSBAC
+		rsbac_target_id.scd = ST_quota;
+		rsbac_attribute_value.dummy = 0;
+		rsbac_pr_debug(aef, "[sys_quotactl()]: calling ADF\n");
+		if (!rsbac_adf_request(R_GET_STATUS_DATA,
+					task_pid(current),
+					T_SCD,
+					rsbac_target_id,
+					A_none,
+					rsbac_attribute_value)) {
+			return -EPERM;
+		}
+#endif
+
 		break;
 	/* allow to query information for dquots we "own" */
 	case Q_GETQUOTA:
 	case Q_XGETQUOTA:
 		if ((type == USRQUOTA && uid_eq(current_euid(), make_kuid(current_user_ns(), id))) ||
-		    (type == GRPQUOTA && in_egroup_p(make_kgid(current_user_ns(), id))))
+		    (type == GRPQUOTA && in_egroup_p(make_kgid(current_user_ns(), id)))) {
+
+#ifdef CONFIG_RSBAC
+			rsbac_target_id.scd = ST_quota;
+			rsbac_attribute_value.dummy = 0;
+			rsbac_pr_debug(aef, "[sys_quotactl()]: calling ADF\n");
+			if (!rsbac_adf_request(R_GET_STATUS_DATA,
+						task_pid(current),
+						T_SCD,
+						rsbac_target_id,
+						A_none,
+						rsbac_attribute_value)) {
+				return -EPERM;
+			}
+#endif
+
 			break;
+		}
 		fallthrough;
 	default:
 		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
+
+#ifdef CONFIG_RSBAC
+		rsbac_target_id.scd = ST_quota;
+		rsbac_attribute_value.dummy = 0;
+		rsbac_pr_debug(aef, "[sys_quotactl()]: calling ADF\n");
+		if (!rsbac_adf_request(R_MODIFY_SYSTEM_DATA,
+					task_pid(current),
+					T_SCD,
+					rsbac_target_id,
+					A_none,
+					rsbac_attribute_value))
+		{
+			return -EPERM;
+		}
+#endif
+
 	}
 
 	return security_quotactl(cmd, type, id, sb);

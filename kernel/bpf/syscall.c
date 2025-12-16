@@ -45,6 +45,8 @@
 #include <net/netkit.h>
 #include <net/tcx.h>
 
+#include <rsbac/hooks.h>
+
 #define IS_FD_ARRAY(map) ((map)->map_type == BPF_MAP_TYPE_PERF_EVENT_ARRAY || \
 			  (map)->map_type == BPF_MAP_TYPE_CGROUP_ARRAY || \
 			  (map)->map_type == BPF_MAP_TYPE_ARRAY_OF_MAPS)
@@ -6123,6 +6125,12 @@ static int __sys_bpf(enum bpf_cmd cmd, bpfptr_t uattr, unsigned int size)
 	union bpf_attr attr;
 	int err;
 
+#ifdef CONFIG_RSBAC_NET
+	enum  rsbac_adf_request_t     rsbac_adf_req;
+	union rsbac_target_id_t       rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	err = bpf_check_uarg_tail_zero(uattr, sizeof(attr), size);
 	if (err)
 		return err;
@@ -6136,6 +6144,29 @@ static int __sys_bpf(enum bpf_cmd cmd, bpfptr_t uattr, unsigned int size)
 	err = security_bpf(cmd, &attr, size, uattr.is_kernel);
 	if (err < 0)
 		return err;
+
+#ifdef CONFIG_RSBAC_NET
+	switch (cmd) {
+		case BPF_MAP_LOOKUP_ELEM:
+		case BPF_MAP_GET_NEXT_KEY:
+			rsbac_adf_req = R_GET_STATUS_DATA;
+			break;
+		default:
+			rsbac_adf_req = R_MODIFY_SYSTEM_DATA;
+			break;
+	}
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.scd = ST_bpf;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(rsbac_adf_req,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	switch (cmd) {
 	case BPF_MAP_CREATE:
