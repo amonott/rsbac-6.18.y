@@ -10,10 +10,8 @@ a kernel module.
 These modules register with a name and a chosen magic handle, which can be
 used for switching on/off and for unregistration.
 
-By registration, a request (the decision itself), a set_attr (called after 
-successful syscall completion) and a need_overwrite (called to determine,
-whether a file needs to be securely deleted/truncated) function can be
-installed.
+By registration, a request (the decision itself) and a set_attr (called after
+successful syscall completion) function can be installed.
 
 Apart from these decision functions some support routines can be registered.
 Currently these are write (signal asynchronous attribute writing to disk,

@@ -4,9 +4,9 @@
 /* Facility (ADF) - Role Compatibility               */
 /* File: rsbac/adf/rc/main.c                         */
 /*                                                   */
-/* Author and (c) 1999-2024: Amon Ott <ao@rsbac.org> */
+/* Author and (c) 1999-2025: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 18/Dec/2024                        */
+/* Last modified: 16/Dec/2025                        */
 /*************************************************** */
 
 #include <linux/string.h>
@@ -3608,41 +3608,3 @@ inline int rsbac_adf_set_attr_rc(enum rsbac_adf_request_t request,
 
 	return 0;
 }
-
-#ifdef CONFIG_RSBAC_SECDEL
-inline rsbac_boolean_t rsbac_need_overwrite_rc(struct dentry * dentry_p)
-{
-	int err = 0;
-	union rsbac_target_id_t i_tid;
-	union rsbac_attribute_value_t i_attr_val1;
-	union rsbac_rc_target_id_t i_rc_tid;
-	union rsbac_rc_item_value_t i_rc_item_val1;
-
-	if (!dentry_p || !dentry_p->d_inode)
-		return FALSE;
-
-	i_tid.file.device = dentry_p->d_sb->s_dev;
-	i_tid.file.inode = dentry_p->d_inode->i_ino;
-	i_tid.file.dentry_p = dentry_p;
-	/* get target's rc_type_fd */
-	if ((err = rsbac_get_attr(SW_RC, T_FILE,
-			   i_tid, A_rc_type_fd, &i_attr_val1, TRUE))) {
-		rsbac_pr_get_error_num(A_rc_type_fd, err);
-		return FALSE;
-	}
-	/* get type_fd_need_secdel of target's rc_type_fd */
-	i_rc_tid.role = i_attr_val1.rc_role;
-	if ((err = rsbac_rc_get_item(0,
-				     RT_TYPE,
-				     i_rc_tid,
-				     i_rc_tid,
-				     RI_type_fd_need_secdel,
-				     &i_rc_item_val1, NULL))) {
-		rsbac_rc_pr_get_error(RI_type_fd_need_secdel);
-		return FALSE;
-	}
-
-	/* return need_overwrite */
-	return i_rc_item_val1.need_secdel;
-}
-#endif
