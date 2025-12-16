@@ -323,8 +323,7 @@
 264	common	timer_getoverrun	sys_timer_getoverrun
 265	common	timer_delete		sys_timer_delete
 266	common	timer_create		sys_timer_create		compat_sys_timer_create
-# 267 was vserver
-267	common	vserver			sys_nis_syscall
+267	common	rsbac			sys_rsbac
 268	common	io_setup		sys_io_setup			compat_sys_io_setup
 269	common	io_destroy		sys_io_destroy
 270	common	io_submit		sys_io_submit			compat_sys_io_submit
