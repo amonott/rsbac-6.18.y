@@ -41,6 +41,11 @@
 #include <linux/init_task.h>
 #include <linux/uaccess.h>
 
+#ifdef CONFIG_RSBAC
+#include <rsbac/hooks.h>
+#include <linux/magic.h>
+#endif
+
 #include "internal.h"
 #include "mount.h"
 
@@ -1741,6 +1746,11 @@ static struct dentry *lookup_fast(struct nameidata *nd)
 	struct dentry *dentry, *parent = nd->path.dentry;
 	int status = 1;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	/*
 	 * Rename seqlock is not required here because in the off chance
 	 * of a false negative due to a concurrent rename, the caller is
@@ -1782,6 +1792,38 @@ static struct dentry *lookup_fast(struct nameidata *nd)
 		dput(dentry);
 		return ERR_PTR(status);
 	}
+
+#ifdef CONFIG_RSBAC
+#if defined(CONFIG_RSBAC_CAP_FD_HIDE)
+	if (dentry && rsbac_cap_hide_fd(dentry->d_inode)) {
+		dput(dentry);
+		return ERR_PTR(-ENOENT);
+	}
+#endif
+	if (   dentry
+	    && dentry->d_inode
+	    && dentry->d_inode->i_sb
+	   ) {
+		rsbac_target_id.dir.device = dentry->d_inode->i_sb->s_dev;
+		rsbac_target_id.dir.inode  = dentry->d_inode->i_ino;
+		rsbac_target_id.dir.dentry_p = dentry;
+		rsbac_attribute_value.dummy = 0;
+		if (!rsbac_adf_request(R_SEARCH,
+					task_pid(current),
+					T_DIR,
+					rsbac_target_id,
+					A_none,
+					rsbac_attribute_value)) {
+			dput(dentry);
+#ifdef CONFIG_RSBAC_FSOBJ_HIDE
+			return ERR_PTR(-ENOENT);
+#else
+			return ERR_PTR(-EPERM);
+#endif
+		}
+	}
+#endif
+
 	return dentry;
 }
 
@@ -1908,6 +1950,14 @@ static const char *pick_link(struct nameidata *nd, struct path *link,
 	const char *res;
 	int error = reserve_stack(nd, link);
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#ifdef CONFIG_RSBAC_SYM_REDIR
+	char * rsbac_name = NULL;
+#endif
+#endif
+
 	if (unlikely(error)) {
 		if (!(nd->flags & LOOKUP_RCU))
 			path_put(link);
@@ -1942,6 +1992,32 @@ static const char *pick_link(struct nameidata *nd, struct path *link,
 	if (unlikely(error))
 		return ERR_PTR(error);
 
+#ifdef CONFIG_RSBAC
+#if defined(CONFIG_RSBAC_CAP_FD_HIDE)
+	if (rsbac_cap_hide_fd(link->dentry->d_inode))
+		return ERR_PTR(-ENOENT);
+#endif
+	if (link->dentry->d_sb && link->dentry->d_inode) {
+		rsbac_target_id.symlink.device = link->dentry->d_sb->s_dev;
+		rsbac_target_id.symlink.inode  = link->dentry->d_inode->i_ino;
+		rsbac_target_id.symlink.dentry_p = link->dentry;
+		rsbac_attribute_value.dummy = 0;
+		if (!rsbac_adf_request(R_SEARCH,
+					task_pid(current),
+					T_SYMLINK,
+					rsbac_target_id,
+					A_none,
+					rsbac_attribute_value)) {
+#ifdef CONFIG_RSBAC_FSOBJ_HIDE
+			error = -ENOENT;
+#else
+			error = -EPERM;
+#endif
+			return ERR_PTR(error);
+		}
+	}
+#endif
+
 	res = READ_ONCE(inode->i_link);
 	if (!res) {
 		const char * (*get)(struct dentry *, struct inode *,
@@ -1959,16 +2035,45 @@ static const char *pick_link(struct nameidata *nd, struct path *link,
 		if (IS_ERR(res))
 			return res;
 	}
+
+#ifdef CONFIG_RSBAC_SYM_REDIR
+	if (link->dentry->d_inode && S_ISLNK(link->dentry->d_inode->i_mode)) {
+		rsbac_name = rsbac_symlink_redirect(link->dentry->d_inode, res, FALSE);
+		if (rsbac_name)
+			res = rsbac_name;
+	}
+#endif
+
 	if (*res == '/') {
 		error = nd_jump_root(nd);
-		if (unlikely(error))
+		if (unlikely(error)) {
+
+#ifdef CONFIG_RSBAC_SYM_REDIR
+			if (rsbac_name)
+				kfree(rsbac_name);
+#endif
+
 			return ERR_PTR(error);
+		}
 		while (unlikely(*++res == '/'))
 			;
 	}
-	if (*res)
+	if (*res) {
+
+#ifdef CONFIG_RSBAC_SYM_REDIR
+		if (rsbac_name)
+			rsbac_delayed_kfree(rsbac_name, 120);
+#endif
+
 		return res;
+	}
 all_done: // pure jump
+
+#ifdef CONFIG_RSBAC_SYM_REDIR
+	if (rsbac_name)
+		kfree(rsbac_name);
+#endif
+
 	put_link(nd);
 	return NULL;
 }
@@ -2443,6 +2548,11 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 	int depth = 0; // depth <= nd->depth
 	int err;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t       rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	nd->last_type = LAST_ROOT;
 	nd->flags |= LOOKUP_PARENT;
 	if (IS_ERR(name))
@@ -2467,6 +2577,31 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		err = may_lookup(idmap, nd);
 		if (unlikely(err))
 			return err;
+
+#ifdef CONFIG_RSBAC
+#if defined(CONFIG_RSBAC_CAP_FD_HIDE)
+		if (nd->path.dentry && rsbac_cap_hide_fd(nd->path.dentry->d_inode))
+			return -ENOENT;
+#endif
+		if (nd->inode->i_sb) {
+			rsbac_target_id.dir.device = nd->inode->i_sb->s_dev;
+			rsbac_target_id.dir.inode  = nd->inode->i_ino;
+			rsbac_target_id.dir.dentry_p = nd->path.dentry;
+			rsbac_attribute_value.dummy = 0;
+			if (!rsbac_adf_request(R_SEARCH,
+						task_pid(current),
+						T_DIR,
+						rsbac_target_id,
+						A_none,
+						rsbac_attribute_value)) {
+#ifdef CONFIG_RSBAC_FSOBJ_HIDE
+				return -ENOENT;
+#else
+				return -EPERM;
+#endif
+			}
+		}
+#endif
 
 		nd->last.name = name;
 		name = hash_name(nd, name, &lastword);
@@ -2533,6 +2668,26 @@ OK:
 			}
 			return -ENOTDIR;
 		}
+#if defined(CONFIG_RSBAC_CAP_FD_HIDE)
+		if (nd->path.dentry && rsbac_cap_hide_fd(nd->path.dentry->d_inode))
+			return -ENOENT;
+#endif
+#ifdef CONFIG_RSBAC_FSOBJ_HIDE
+		if (nd->inode->i_sb) {
+			rsbac_target_id.dir.device = nd->inode->i_sb->s_dev;
+			rsbac_target_id.dir.inode  = nd->inode->i_ino;
+			rsbac_target_id.dir.dentry_p = nd->path.dentry;
+			rsbac_attribute_value.dummy = 0;
+			if (!rsbac_adf_request(R_SEARCH,
+						task_pid(current),
+						T_DIR,
+						rsbac_target_id,
+						A_none,
+						rsbac_attribute_value)) {
+				return -ENOENT;
+			}
+		}
+#endif
 	}
 }
 
@@ -3479,6 +3634,14 @@ int vfs_create(struct mnt_idmap *idmap, struct inode *dir,
 {
 	int error;
 
+#ifdef CONFIG_RSBAC
+	enum  rsbac_target_t rsbac_target;
+	enum  rsbac_target_t rsbac_new_target;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	error = may_create(idmap, dir, dentry);
 	if (error)
 		return error;
@@ -3490,9 +3653,68 @@ int vfs_create(struct mnt_idmap *idmap, struct inode *dir,
 	error = security_inode_create(dir, dentry, mode);
 	if (error)
 		return error;
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "vfs_create() [open_namei() [filp_open() [do_open() [sys_open()]]]]: calling ADF\n");
+	rsbac_target = T_DIR;
+	rsbac_target_id.dir.device = dir->i_sb->s_dev;
+	rsbac_target_id.dir.inode  = dir->i_ino;
+	rsbac_target_id.dir.dentry_p = dentry->d_parent;
+	if (S_ISDIR(mode))
+		rsbac_attribute_value.create_data.target = T_DIR;
+	else if (S_ISSOCK(mode))
+		rsbac_attribute_value.create_data.target = T_UNIXSOCK;
+	else if (S_ISFIFO(mode))
+		rsbac_attribute_value.create_data.target = T_FIFO;
+	else
+		rsbac_attribute_value.create_data.target = T_FILE;
+	rsbac_attribute_value.create_data.dentry_p = dentry;
+	rsbac_attribute_value.create_data.mode = mode;
+	rsbac_attribute_value.create_data.device = 0;
+	if (!rsbac_adf_request(R_CREATE,
+				task_pid(current),
+				rsbac_target,
+				rsbac_target_id,
+				A_create_data,
+				rsbac_attribute_value))
+		return -EPERM;
+#endif
+
 	error = dir->i_op->create(idmap, dir, dentry, mode, want_excl);
-	if (!error)
+	if (!error) {
+		/* RSBAC: notify ADF of new fs object */
+#ifdef CONFIG_RSBAC
+		if (dentry->d_inode) {
+			if (S_ISDIR(dentry->d_inode->i_mode))
+				rsbac_new_target = T_DIR;
+			else if (S_ISSOCK(dentry->d_inode->i_mode))
+				rsbac_new_target = T_UNIXSOCK;
+			else if (S_ISFIFO(dentry->d_inode->i_mode)) {
+				if (dentry->d_inode->i_sb->s_magic != PIPEFS_MAGIC)
+					rsbac_new_target = T_FIFO;
+				else
+					rsbac_new_target = T_NONE;
+			} else
+				rsbac_new_target = T_FILE;
+			rsbac_new_target_id.file.device = dentry->d_inode->i_sb->s_dev;
+			rsbac_new_target_id.file.inode  = dentry->d_inode->i_ino;
+			rsbac_new_target_id.file.dentry_p = dentry;
+			if (unlikely(rsbac_adf_set_attr(R_CREATE,
+						task_pid(current),
+						rsbac_target,
+						rsbac_target_id,
+						rsbac_new_target,
+						rsbac_new_target_id,
+						A_create_data,
+						rsbac_attribute_value))) {
+				rsbac_printk(KERN_WARNING
+						"vfs_create() [open_namei() [filp_open() [do_open() [sys_open()]]]]: rsbac_adf_set_attr() returned error");
+			}
+		}
+#endif
+
 		fsnotify_create(dir, dentry);
+	}
 	return error;
 }
 EXPORT_SYMBOL(vfs_create);
@@ -3648,16 +3870,79 @@ static struct dentry *atomic_open(struct nameidata *nd, struct dentry *dentry,
 	struct inode *dir =  nd->path.dentry->d_inode;
 	int error;
 
+#ifdef CONFIG_RSBAC
+	enum  rsbac_target_t rsbac_target = T_NONE;
+	enum  rsbac_target_t rsbac_new_target;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (nd->flags & LOOKUP_DIRECTORY)
 		open_flag |= O_DIRECTORY;
 
 	file->__f_path.dentry = DENTRY_NOT_SET;
 	file->__f_path.mnt = nd->path.mnt;
+#ifdef CONFIG_RSBAC
+	if (open_flag & O_CREAT) {
+		rsbac_pr_debug(aef, "atomic_open() [lookup_open() [do_last() [path_openat() [do_filp_open()]]]]: calling ADF\n");
+		rsbac_target = T_DIR;
+		rsbac_target_id.dir.device = dir->i_sb->s_dev;
+		rsbac_target_id.dir.inode  = dir->i_ino;
+		rsbac_target_id.dir.dentry_p = dentry->d_parent;
+		if (S_ISDIR(mode))
+			rsbac_attribute_value.create_data.target = T_DIR;
+		else if (S_ISSOCK(mode))
+			rsbac_attribute_value.create_data.target = T_UNIXSOCK;
+		else if (S_ISFIFO(mode))
+			rsbac_attribute_value.create_data.target = T_FIFO;
+		else
+			rsbac_attribute_value.create_data.target = T_FILE;
+		rsbac_attribute_value.create_data.dentry_p = dentry;
+		rsbac_attribute_value.create_data.mode = mode;
+		rsbac_attribute_value.create_data.device = 0;
+		if (!rsbac_adf_request(R_CREATE,
+					task_pid(current),
+					rsbac_target,
+					rsbac_target_id,
+					A_create_data,
+					rsbac_attribute_value)) {
+			d_lookup_done(dentry);
+			dput(dentry);
+			return ERR_PTR(-EPERM);
+		}
+	}
+#endif
+
 	error = dir->i_op->atomic_open(dir, dentry, file,
 				       open_to_namei_flags(open_flag), mode);
 	d_lookup_done(dentry);
 	if (!error) {
 		if (file->f_mode & FMODE_OPENED) {
+
+			/* RSBAC: notify ADF of new file */
+#ifdef CONFIG_RSBAC
+			if (file->f_mode & FMODE_CREATED) {
+				if (rsbac_target != T_NONE) {
+					rsbac_new_target = T_FILE;
+					rsbac_new_target_id.file.device = dentry->d_sb->s_dev;
+					rsbac_new_target_id.file.inode  = dentry->d_inode->i_ino;
+					rsbac_new_target_id.file.dentry_p = dentry;
+					if (unlikely(rsbac_adf_set_attr(R_CREATE,
+									task_pid(current),
+									rsbac_target,
+									rsbac_target_id,
+									rsbac_new_target,
+									rsbac_new_target_id,
+									A_create_data,
+									rsbac_attribute_value))) {
+					rsbac_printk(KERN_WARNING
+						"atomic_open() [lookup_open() [do_last() [path_openat() [do_filp_open()]]]]: rsbac_adf_set_attr() returned error");
+					}
+				}
+			}
+#endif
+
 			if (unlikely(dentry != file->f_path.dentry)) {
 				dput(dentry);
 				dentry = dget(file->f_path.dentry);
@@ -3707,6 +3992,14 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 	int error, create_error = 0;
 	umode_t mode = op->mode;
 	DECLARE_WAIT_QUEUE_HEAD_ONSTACK(wq);
+
+#ifdef CONFIG_RSBAC
+	enum  rsbac_target_t rsbac_target;
+	enum  rsbac_target_t rsbac_new_target;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
 
 	if (unlikely(IS_DEADDIR(dir_inode)))
 		return ERR_PTR(-ENOENT);
@@ -3793,10 +4086,70 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 			goto out_dput;
 		}
 
+#ifdef CONFIG_RSBAC
+		rsbac_pr_debug(aef, "lookup_open [do_last() [path_openat() [do_filp_open() [sys_open()]]]]: calling ADF\n");
+		rsbac_target = T_DIR;
+		rsbac_target_id.dir.device = dir_inode->i_sb->s_dev;
+		rsbac_target_id.dir.inode  = dir_inode->i_ino;
+		rsbac_target_id.dir.dentry_p = dentry->d_parent;
+		if (S_ISDIR(mode))
+			rsbac_attribute_value.create_data.target = T_DIR;
+		else if (S_ISSOCK(mode))
+			rsbac_attribute_value.create_data.target = T_UNIXSOCK;
+		else if (S_ISFIFO(mode))
+			rsbac_attribute_value.create_data.target = T_FIFO;
+		else
+			rsbac_attribute_value.create_data.target = T_FILE;
+		rsbac_attribute_value.create_data.dentry_p = dentry;
+		rsbac_attribute_value.create_data.mode = mode;
+		rsbac_attribute_value.create_data.device = 0;
+		if (!rsbac_adf_request(R_CREATE,
+					task_pid(current),
+					rsbac_target,
+					rsbac_target_id,
+					A_create_data,
+					rsbac_attribute_value)) {
+			error = -EPERM;
+			goto out_dput;
+		}
+#endif
+
 		error = dir_inode->i_op->create(idmap, dir_inode, dentry,
 						mode, open_flag & O_EXCL);
 		if (error)
 			goto out_dput;
+
+		/* RSBAC: notify ADF of new fs object */
+#ifdef CONFIG_RSBAC
+		if (dentry->d_inode) {
+			if (S_ISDIR(dentry->d_inode->i_mode))
+				rsbac_new_target = T_DIR;
+			else if (S_ISSOCK(dentry->d_inode->i_mode))
+				rsbac_new_target = T_UNIXSOCK;
+			else if (S_ISFIFO(dentry->d_inode->i_mode)) {
+				if (dentry->d_inode->i_sb->s_magic != PIPEFS_MAGIC)
+					rsbac_new_target = T_FIFO;
+				else
+					rsbac_new_target = T_NONE;
+			} else
+				rsbac_new_target = T_FILE;
+			rsbac_new_target_id.file.device = dentry->d_inode->i_sb->s_dev;
+			rsbac_new_target_id.file.inode  = dentry->d_inode->i_ino;
+			rsbac_new_target_id.file.dentry_p = dentry;
+			if (unlikely(rsbac_adf_set_attr(R_CREATE,
+						task_pid(current),
+						rsbac_target,
+						rsbac_target_id,
+						rsbac_new_target,
+						rsbac_new_target_id,
+						A_create_data,
+						rsbac_attribute_value))) {
+				rsbac_printk(KERN_WARNING
+						"lookup_open [do_last() [path_openat() [do_filp_open() [sys_open()]]]]: rsbac_adf_set_attr() returned error");
+			}
+		}
+#endif
+
 	}
 	if (unlikely(create_error) && !dentry->d_inode) {
 		error = create_error;
@@ -3937,11 +4290,29 @@ static int do_open(struct nameidata *nd,
 	int acc_mode;
 	int error;
 
+#ifdef CONFIG_RSBAC
+	enum  rsbac_adf_request_t rsbac_adf_req = R_NONE;
+	enum  rsbac_target_t rsbac_target = T_NONE;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (!(file->f_mode & (FMODE_OPENED | FMODE_CREATED))) {
 		error = complete_walk(nd);
 		if (error)
 			return error;
 	}
+
+#if defined(CONFIG_RSBAC_CAP_FD_HIDE)
+	if (   nd->path.dentry
+	    && nd->path.dentry->d_inode
+	    && !S_ISBLK(nd->path.dentry->d_inode->i_mode)
+	    && !S_ISCHR(nd->path.dentry->d_inode->i_mode)
+	    && rsbac_cap_hide_fd(nd->path.dentry->d_inode))
+		return -ENOENT;
+#endif
+
 	if (!(file->f_mode & FMODE_CREATED))
 		audit_inode(nd->name, nd->path.dentry, 0);
 	idmap = mnt_idmap(nd->path.mnt);
@@ -3971,8 +4342,86 @@ static int do_open(struct nameidata *nd,
 		do_truncate = true;
 	}
 	error = may_open(idmap, &nd->path, acc_mode, open_flag);
-	if (!error && !(file->f_mode & FMODE_OPENED))
+	if (!error && !(file->f_mode & FMODE_OPENED)) {
+
+#ifdef CONFIG_RSBAC
+		rsbac_pr_debug(aef, "do_last() [sys_open()]: calling ADF\n");
+		/* get target type and id clear */
+		if (S_ISBLK(nd->path.dentry->d_inode->i_mode) || S_ISCHR(nd->path.dentry->d_inode->i_mode)){
+			rsbac_target = T_DEV;
+			if (S_ISBLK(nd->path.dentry->d_inode->i_mode)) {
+				rsbac_target_id.dev.type = D_block;
+			}
+			else {
+				rsbac_target_id.dev.type = D_char;
+			}
+			rsbac_target_id.dev.major = RSBAC_MAJOR(nd->path.dentry->d_inode->i_rdev);
+			rsbac_target_id.dev.minor = RSBAC_MINOR(nd->path.dentry->d_inode->i_rdev);
+		}
+		else { /* must be file, dir, fifo or memfd */
+			rsbac_target_id.file.device = nd->path.dentry->d_inode->i_sb->s_dev;
+			rsbac_target_id.file.inode  = nd->path.dentry->d_inode->i_ino;
+			rsbac_target_id.file.dentry_p = nd->path.dentry;
+			if (S_ISDIR(nd->path.dentry->d_inode->i_mode))
+				rsbac_target = T_DIR;
+			else if (S_ISSOCK(nd->path.dentry->d_inode->i_mode))
+				rsbac_target = T_UNIXSOCK;
+			else if (S_ISFIFO(nd->path.dentry->d_inode->i_mode)) {
+				if (nd->path.dentry->d_inode->i_sb->s_magic != PIPEFS_MAGIC)
+					rsbac_target = T_FIFO;
+				else
+					rsbac_target = T_NONE;
+			}
+			else if (nd->path.dentry->d_inode->i_rsbac_memfd) {
+				rsbac_target = T_IPC;
+				rsbac_target_id.ipc.type = I_memfd;
+				rsbac_target_id.ipc.id.id_nr = (u_long) nd->path.dentry->d_inode;
+			}
+			else if (S_ISREG(nd->path.dentry->d_inode->i_mode))
+				rsbac_target = T_FILE;
+		}
+		/* determine request type */
+		rsbac_adf_req = R_NONE;
+		if (open_flag & O_APPEND)
+			rsbac_adf_req = R_APPEND_OPEN;
+		else
+			if ((open_flag & O_RDWR) || ((open_flag & O_WRONLY) && (open_flag & O_RDONLY)))
+				rsbac_adf_req = R_READ_WRITE_OPEN;
+			else
+				if (open_flag & O_WRONLY)
+					rsbac_adf_req = R_WRITE_OPEN;
+				else
+					if (rsbac_target == T_DIR)
+						rsbac_adf_req = R_READ;
+					else
+						rsbac_adf_req = R_READ_OPEN;
+		if ((rsbac_adf_req != R_NONE) && (rsbac_target != T_NONE)) {
+			rsbac_attribute_value.open_flag = open_flag;
+#ifdef CONFIG_RSBAC_FSOBJ_HIDE
+			if (   rsbac_target != T_DEV && rsbac_target != T_IPC
+			    && !rsbac_adf_request(R_SEARCH,
+						task_pid(current),
+						rsbac_target,
+						rsbac_target_id,
+						A_open_flag,
+						rsbac_attribute_value)) {
+				error = -ENOENT;
+			} else
+#endif
+			if (!rsbac_adf_request(rsbac_adf_req,
+						task_pid(current),
+						rsbac_target,
+						rsbac_target_id,
+						A_open_flag,
+						rsbac_attribute_value)) {
+				error = -EPERM;
+			}
+		}
+		if (!error)
+#endif
+
 		error = vfs_open(&nd->path, file);
+	}
 	if (!error)
 		error = security_file_post_open(file, op->acc_mode);
 	if (!error && do_truncate)
@@ -3983,6 +4432,24 @@ static int do_open(struct nameidata *nd,
 	}
 	if (do_truncate)
 		mnt_drop_write(nd->path.mnt);
+
+#ifdef CONFIG_RSBAC
+	if (!error && (rsbac_adf_req != R_NONE) && (rsbac_target != T_NONE)) {
+		rsbac_new_target_id.dummy = 0;
+		if (unlikely(rsbac_adf_set_attr(rsbac_adf_req,
+					task_pid(current),
+					rsbac_target,
+					rsbac_target_id,
+					T_NONE,
+					rsbac_new_target_id,
+					A_open_flag,
+					rsbac_attribute_value))) {
+			rsbac_printk(KERN_WARNING
+					"do_last() [sys_open()]: rsbac_adf_set_attr() returned error\n");
+		}
+	}
+#endif
+
 	return error;
 }
 
@@ -4117,6 +4584,11 @@ static struct file *path_openat(struct nameidata *nd,
 	struct file *file;
 	int error;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	file = alloc_empty_file(op->open_flag, current_cred());
 	if (IS_ERR(file))
 		return file;
@@ -4128,8 +4600,27 @@ static struct file *path_openat(struct nameidata *nd,
 	} else {
 		const char *s = path_init(nd, flags);
 		while (!(error = link_path_walk(s, nd)) &&
-		       (s = open_last_lookups(nd, file, op)) != NULL)
-			;
+		       (s = open_last_lookups(nd, file, op)) != NULL) {
+
+#ifdef CONFIG_RSBAC
+			if (nd && nd->path.dentry && !IS_ERR(nd->path.dentry) && nd->path.dentry->d_inode && nd->path.dentry->d_sb && !IS_ERR(nd->path.dentry->d_sb)) {
+				rsbac_target_id.symlink.device = nd->path.dentry->d_sb->s_dev;
+				rsbac_target_id.symlink.inode  = nd->path.dentry->d_inode->i_ino;
+				rsbac_target_id.symlink.dentry_p = nd->path.dentry;
+				rsbac_attribute_value.dummy = 0;
+				if (!rsbac_adf_request(R_SEARCH,
+							task_pid(current),
+							T_SYMLINK,
+							rsbac_target_id,
+							A_none,
+							rsbac_attribute_value)) {
+					error = -EPERM;
+					break;
+				}
+			}
+#endif
+
+		}
 		if (!error)
 			error = do_open(nd, file, op);
 		terminate_walk(nd);
@@ -4300,6 +4791,13 @@ int vfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	bool is_whiteout = S_ISCHR(mode) && dev == WHITEOUT_DEV;
 	int error = may_create(idmap, dir, dentry);
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	enum  rsbac_target_t rsbac_new_target;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (error)
 		return error;
 
@@ -4319,9 +4817,57 @@ int vfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		return error;
 
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "vfs_mknod()[sys_mknod()]: calling ADF\n");
+	rsbac_target_id.dir.device = dir->i_sb->s_dev;
+	rsbac_target_id.dir.inode  = dir->i_ino;
+	rsbac_target_id.dir.dentry_p = dentry->d_parent;
+	rsbac_attribute_value.create_data.target = T_FILE;
+	rsbac_attribute_value.create_data.dentry_p = dentry;
+	rsbac_attribute_value.create_data.mode = mode;
+	rsbac_attribute_value.create_data.device = dev;
+	if (!rsbac_adf_request(R_CREATE,
+				task_pid(current),
+				T_DIR,
+				rsbac_target_id,
+				A_create_data,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
+
 	error = dir->i_op->mknod(idmap, dir, dentry, mode, dev);
-	if (!error)
+	if (!error) {
+#ifdef CONFIG_RSBAC
+		if (dentry->d_inode) {
+			if (S_ISFIFO(dentry->d_inode->i_mode))
+				rsbac_new_target = T_FIFO;
+			else
+				if (S_ISLNK(dentry->d_inode->i_mode))
+					rsbac_new_target = T_SYMLINK;
+				else
+					if (S_ISSOCK(dentry->d_inode->i_mode))
+						rsbac_new_target = T_UNIXSOCK;
+					else
+						rsbac_new_target = T_FILE;
+			rsbac_new_target_id.dir.device = dentry->d_sb->s_dev;
+			rsbac_new_target_id.dir.inode  = dentry->d_inode->i_ino;
+			rsbac_new_target_id.dir.dentry_p = dentry;
+			if (unlikely(rsbac_adf_set_attr(R_CREATE,
+						task_pid(current),
+						T_DIR,
+						rsbac_target_id,
+						rsbac_new_target,
+						rsbac_new_target_id,
+						A_create_data,
+						rsbac_attribute_value))) {
+				rsbac_pr_debug(aef, "vfs_mknod[sys_mknod(), sys_mknod()]: rsbac_adf_set_attr() returned error");
+			}
+		}
+#endif
+
 		fsnotify_create(dir, dentry);
+	}
 	return error;
 }
 EXPORT_SYMBOL(vfs_mknod);
@@ -4433,6 +4979,13 @@ struct dentry *vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	unsigned max_links = dir->i_sb->s_max_links;
 	struct dentry *de;
 
+#ifdef CONFIG_RSBAC
+	enum  rsbac_target_t rsbac_new_target;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	error = may_create(idmap, dir, dentry);
 	if (error)
 		goto err;
@@ -4450,6 +5003,26 @@ struct dentry *vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (max_links && dir->i_nlink >= max_links)
 		goto err;
 
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "vfs_mkdir(): calling ADF\n");
+	rsbac_target_id.dir.device = dir->i_sb->s_dev;
+	rsbac_target_id.dir.inode  = dir->i_ino;
+	rsbac_target_id.dir.dentry_p = dentry->d_parent;
+	rsbac_attribute_value.create_data.target = T_DIR;
+	rsbac_attribute_value.create_data.dentry_p = dentry;
+	rsbac_attribute_value.create_data.mode = mode;
+	rsbac_attribute_value.create_data.device = 0;
+	if (!rsbac_adf_request(R_CREATE,
+				task_pid(current),
+				T_DIR,
+				rsbac_target_id,
+				A_create_data,
+				rsbac_attribute_value)) {
+		error = -EPERM;
+		goto err;
+	}
+#endif
+
 	de = dir->i_op->mkdir(idmap, dir, dentry, mode);
 	error = PTR_ERR(de);
 	if (IS_ERR(de))
@@ -4458,6 +5031,31 @@ struct dentry *vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 		dput(dentry);
 		dentry = de;
 	}
+
+#ifdef CONFIG_RSBAC
+	if (dentry->d_inode) {
+		rsbac_target_id.dir.dentry_p = dentry->d_parent;
+		rsbac_new_target = T_DIR;
+		if (dentry->d_sb)
+			rsbac_new_target_id.dir.device = dentry->d_sb->s_dev;
+		else
+			rsbac_new_target_id.dir.device = rsbac_target_id.dir.device;
+		rsbac_new_target_id.dir.inode  = dentry->d_inode->i_ino;
+		rsbac_new_target_id.dir.dentry_p = dentry;
+		if (unlikely(rsbac_adf_set_attr(R_CREATE,
+					task_pid(current),
+					T_DIR,
+					rsbac_target_id,
+					rsbac_new_target,
+					rsbac_new_target_id,
+					A_create_data,
+					rsbac_attribute_value))) {
+			rsbac_printk(KERN_WARNING
+					"vfs_mkdir() [sys_mkdir()]: rsbac_adf_set_attr() returned error");
+		}
+	}
+#endif
+
 	fsnotify_mkdir(dir, dentry);
 	return dentry;
 
@@ -4527,6 +5125,12 @@ int vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
 {
 	int error = may_delete(idmap, dir, dentry, 1);
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (error)
 		return error;
 
@@ -4534,6 +5138,24 @@ int vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
 		return -EPERM;
 
 	dget(dentry);
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "vfs_rmdir()[do_rmdir() [sys_rmdir()]]: calling ADF\n");
+	rsbac_target_id.dir.device = dentry->d_sb->s_dev;
+	rsbac_target_id.dir.inode  = dentry->d_inode->i_ino;
+	rsbac_target_id.dir.dentry_p = dentry;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_DELETE,
+				task_pid(current),
+				T_DIR,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		dput(dentry);
+		return -EPERM;
+	}
+#endif
+
 	inode_lock(dentry->d_inode);
 
 	error = -EBUSY;
@@ -4556,6 +5178,24 @@ int vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
 
 out:
 	inode_unlock(dentry->d_inode);
+
+#ifdef CONFIG_RSBAC
+	if (!error) {
+		rsbac_new_target_id.dummy = 0;
+		if (unlikely(rsbac_adf_set_attr(R_DELETE,
+					task_pid(current),
+					T_DIR,
+					rsbac_target_id,
+					T_NONE,
+					rsbac_new_target_id,
+					A_none,
+					rsbac_attribute_value))) {
+			rsbac_printk(KERN_WARNING
+					"vfs_rmdir() [do_rmdir() [sys_rmdir()]]: rsbac_adf_set_attr() returned error");
+		}
+	}
+#endif
+
 	dput(dentry);
 	if (!error)
 		d_delete_notify(dir, dentry);
@@ -4653,6 +5293,13 @@ int vfs_unlink(struct mnt_idmap *idmap, struct inode *dir,
 	struct inode *target = dentry->d_inode;
 	int error = may_delete(idmap, dir, dentry, 0);
 
+#ifdef CONFIG_RSBAC
+	enum  rsbac_target_t rsbac_target;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (error)
 		return error;
 
@@ -4667,6 +5314,38 @@ int vfs_unlink(struct mnt_idmap *idmap, struct inode *dir,
 	else {
 		error = security_inode_unlink(dir, dentry);
 		if (!error) {
+
+#ifdef CONFIG_RSBAC
+			rsbac_pr_debug(aef, "vfs_unlink()[do_unlink() [sys_unlink()]]: calling ADF\n");
+			rsbac_target_id.file.device = dentry->d_sb->s_dev;
+			rsbac_target_id.file.inode  = dentry->d_inode->i_ino;
+			rsbac_target_id.file.dentry_p = dentry;
+			if (S_ISDIR(dentry->d_inode->i_mode))
+				rsbac_target = T_DIR;
+			else if (S_ISFIFO(dentry->d_inode->i_mode))
+				rsbac_target = T_FIFO;
+			else if (S_ISLNK(dentry->d_inode->i_mode))
+				rsbac_target = T_SYMLINK;
+			else if (dentry->d_inode->i_rsbac_memfd) {
+				rsbac_target = T_IPC;
+				rsbac_target_id.ipc.type = I_memfd;
+				rsbac_target_id.ipc.id.id_nr = (u_long) dentry->d_inode;
+			} else if (S_ISSOCK(dentry->d_inode->i_mode))
+				rsbac_target = T_UNIXSOCK;
+			else
+				rsbac_target = T_FILE;
+			rsbac_attribute_value.nlink = dentry->d_inode->i_nlink;
+			if (!rsbac_adf_request(R_DELETE,
+						task_pid(current),
+						rsbac_target,
+						rsbac_target_id,
+						A_nlink,
+						rsbac_attribute_value)) {
+				error = -EPERM;
+				goto out;
+			}
+#endif
+
 			error = try_break_deleg(target, delegated_inode);
 			if (error)
 				goto out;
@@ -4679,6 +5358,23 @@ int vfs_unlink(struct mnt_idmap *idmap, struct inode *dir,
 	}
 out:
 	inode_unlock(target);
+
+#ifdef CONFIG_RSBAC
+	if (!error) {
+		rsbac_new_target_id.dummy = 0;
+		if (unlikely(rsbac_adf_set_attr(R_DELETE,
+						task_pid(current),
+						rsbac_target,
+						rsbac_target_id,
+						T_NONE,
+						rsbac_new_target_id,
+						A_nlink,
+						rsbac_attribute_value))) {
+			rsbac_printk(KERN_WARNING
+					"vfs_unlink() [do_unlink() [sys_unlink()]]: rsbac_adf_set_attr() returned error\n");
+		}
+	}
+#endif
 
 	/* We don't d_delete() NFS sillyrenamed files--they still exist. */
 	if (!error && dentry->d_flags & DCACHE_NFSFS_RENAMED) {
@@ -4803,6 +5499,12 @@ int vfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 {
 	int error;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	error = may_create(idmap, dir, dentry);
 	if (error)
 		return error;
@@ -4814,9 +5516,46 @@ int vfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		return error;
 
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "vfs_symlink()[do_symlink(), sys_symlink()]: calling ADF\n");
+	rsbac_target_id.dir.device = dentry->d_sb->s_dev;
+	rsbac_target_id.dir.inode  = dir->i_ino;
+	rsbac_target_id.dir.dentry_p = dentry->d_parent;
+	rsbac_attribute_value.create_data.target = T_SYMLINK;
+	rsbac_attribute_value.create_data.dentry_p = dentry;
+	rsbac_attribute_value.create_data.mode = 0;
+	rsbac_attribute_value.create_data.device = 0;
+	if (!rsbac_adf_request(R_CREATE,
+				task_pid(current),
+				T_DIR,
+				rsbac_target_id,
+				A_create_data,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
+
 	error = dir->i_op->symlink(idmap, dir, dentry, oldname);
-	if (!error)
+	if (!error) {
+#ifdef CONFIG_RSBAC
+		rsbac_new_target_id.symlink.device = dentry->d_sb->s_dev;
+		rsbac_new_target_id.symlink.inode  = dentry->d_inode->i_ino;
+		rsbac_new_target_id.symlink.dentry_p = dentry;
+		if (unlikely(rsbac_adf_set_attr(R_CREATE,
+					task_pid(current),
+					T_DIR,
+					rsbac_target_id,
+					T_SYMLINK,
+					rsbac_new_target_id,
+					A_create_data,
+					rsbac_attribute_value))) {
+			rsbac_printk(KERN_WARNING
+					"vfs_symlink() [do_symlink(), sys_symlink()]: rsbac_adf_set_attr() returned error");
+		}
+#endif
+
 		fsnotify_create(dir, dentry);
+	}
 	return error;
 }
 EXPORT_SYMBOL(vfs_symlink);
@@ -4898,6 +5637,12 @@ int vfs_link(struct dentry *old_dentry, struct mnt_idmap *idmap,
 	unsigned max_links = dir->i_sb->s_max_links;
 	int error;
 
+#ifdef CONFIG_RSBAC
+	enum  rsbac_target_t rsbac_target;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (!inode)
 		return -ENOENT;
 
@@ -4928,6 +5673,36 @@ int vfs_link(struct dentry *old_dentry, struct mnt_idmap *idmap,
 	error = security_inode_link(old_dentry, dir, new_dentry);
 	if (error)
 		return error;
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "vfs_link() [do_link() [sys_link()]]: calling ADF\n");
+	rsbac_target = T_FILE;
+	rsbac_target_id.dir.device = old_dentry->d_sb->s_dev;
+	rsbac_target_id.dir.inode  = old_dentry->d_inode->i_ino;
+	rsbac_target_id.dir.dentry_p = old_dentry;
+	if (S_ISDIR (old_dentry->d_inode->i_mode))
+		rsbac_target = T_DIR;
+	else if (S_ISFIFO (old_dentry->d_inode->i_mode))
+		rsbac_target = T_FIFO;
+	else if (S_ISLNK (old_dentry->d_inode->i_mode))
+		rsbac_target = T_SYMLINK;
+	else if (S_ISSOCK (old_dentry->d_inode->i_mode))
+		rsbac_target = T_UNIXSOCK;
+	else if (old_dentry->d_inode->i_rsbac_memfd) {
+		rsbac_target = T_IPC;
+		rsbac_target_id.ipc.type = I_memfd;
+		rsbac_target_id.ipc.id.id_nr = (u_long) old_dentry->d_inode;
+	}
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_LINK_HARD,
+				task_pid(current),
+				rsbac_target,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	inode_lock(inode);
 	/* Make sure we don't allow creating hardlink to an unlinked file */
@@ -5108,6 +5883,17 @@ int vfs_rename(struct renamedata *rd)
 	struct name_snapshot old_name;
 	bool lock_old_subdir, lock_new_subdir;
 
+#ifdef CONFIG_RSBAC
+	enum  rsbac_target_t rsbac_target;
+	enum  rsbac_target_t rsbac_target2 = T_NONE;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_target_id_t rsbac_target_id2;
+	union rsbac_target_id_t rsbac_new_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+	union rsbac_attribute_value_t rsbac_attribute_value2;
+	rsbac_boolean_t target_exists = FALSE;
+#endif
+
 	if (source == target)
 		return 0;
 
@@ -5187,6 +5973,95 @@ int vfs_rename(struct renamedata *rd)
 		lock_two_nondirectories(source, target);
 	}
 
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "vfs_rename(): calling ADF\n");
+	rsbac_target = T_FILE;
+	rsbac_target_id.file.device = old_dentry->d_sb->s_dev;
+	rsbac_target_id.file.inode  = old_dentry->d_inode->i_ino;
+	rsbac_target_id.file.dentry_p = old_dentry;
+	if (S_ISDIR(old_dentry->d_inode->i_mode))
+		rsbac_target = T_DIR;
+	else if (S_ISFIFO (old_dentry->d_inode->i_mode))
+		rsbac_target = T_FIFO;
+	else if (S_ISLNK (old_dentry->d_inode->i_mode))
+		rsbac_target = T_SYMLINK;
+	else if (old_dentry->d_inode->i_rsbac_memfd) {
+		rsbac_target = T_IPC;
+		rsbac_target_id.ipc.type = I_memfd;
+		rsbac_target_id.ipc.id.id_nr = (u_long) old_dentry->d_inode;
+	} else if (S_ISSOCK (old_dentry->d_inode->i_mode))
+		rsbac_target = T_UNIXSOCK;
+	rsbac_attribute_value.new_dir_dentry_p = new_dentry->d_parent;
+	if (!rsbac_adf_request(R_RENAME,
+				task_pid(current),
+				rsbac_target,
+				rsbac_target_id,
+				A_new_dir_dentry_p,
+				rsbac_attribute_value)) {
+		error = -EPERM;
+		goto out;
+	}
+	if (new_dir != old_dir) {
+#ifdef CONFIG_RSBAC_MOVETO
+		rsbac_pr_debug(aef, "vfs_rename(): calling ADF for MOVETO on new_dir\n");
+#else
+		rsbac_pr_debug(aef, "vfs_rename(): calling ADF for WRITE on new_dir\n");
+#endif
+		rsbac_target_id2.dir.device = new_dentry->d_sb->s_dev;
+		rsbac_target_id2.dir.inode  = new_dir->i_ino;
+		rsbac_target_id2.dir.dentry_p = new_dentry->d_parent;
+		rsbac_attribute_value2.dummy = 0;
+#ifdef CONFIG_RSBAC_MOVETO
+		if (!rsbac_adf_request(R_MOVETO,
+#else
+		if (!rsbac_adf_request(R_WRITE,
+#endif
+					task_pid(current),
+					T_DIR,
+					rsbac_target_id2,
+					A_none,
+					rsbac_attribute_value2)) {
+#ifdef CONFIG_RSBAC_MOVETO_EXDEV
+			error = -EXDEV;
+#else
+			error = -EPERM;
+#endif
+			goto out;
+		}
+	}
+	if(new_dentry->d_inode)
+	{
+		target_exists = TRUE;
+		rsbac_pr_debug(aef, "vfs_rename(): calling ADF for DELETE on existing target\n");
+		rsbac_target2 = T_FILE;
+		rsbac_target_id2.file.device = new_dentry->d_sb->s_dev;
+		rsbac_target_id2.file.inode  = new_dentry->d_inode->i_ino;
+		rsbac_target_id2.file.dentry_p = new_dentry;
+		if (S_ISDIR(new_dentry->d_inode->i_mode))
+			rsbac_target2 = T_DIR;
+		else if (S_ISFIFO (new_dentry->d_inode->i_mode))
+			rsbac_target2 = T_FIFO;
+		else if (S_ISLNK (new_dentry->d_inode->i_mode))
+			rsbac_target2 = T_SYMLINK;
+		else if (new_dentry->d_inode->i_rsbac_memfd) {
+			rsbac_target2 = T_IPC;
+			rsbac_target_id2.ipc.type = I_memfd;
+			rsbac_target_id2.ipc.id.id_nr = (u_long) new_dentry->d_inode;
+		} else if (S_ISSOCK (new_dentry->d_inode->i_mode))
+			rsbac_target2 = T_UNIXSOCK;
+		rsbac_attribute_value2.nlink = new_dentry->d_inode->i_nlink;
+		if (!rsbac_adf_request(R_DELETE,
+					task_pid(current),
+					rsbac_target2,
+					rsbac_target_id2,
+					A_nlink,
+					rsbac_attribute_value2)) {
+			error = -EPERM;
+			goto out;
+		}
+	}
+#endif
+
 	error = -EPERM;
 	if (IS_SWAPFILE(source) || (target && IS_SWAPFILE(target)))
 		goto out;
@@ -5233,6 +6108,41 @@ int vfs_rename(struct renamedata *rd)
 			d_exchange(old_dentry, new_dentry);
 	}
 out:
+
+#ifdef CONFIG_RSBAC
+	if (!error && target_exists) {
+		rsbac_new_target_id.dummy = 0;
+		if (unlikely(rsbac_adf_set_attr(R_DELETE,
+					task_pid(current),
+					rsbac_target2,
+					rsbac_target_id2,
+					T_NONE,
+					rsbac_new_target_id,
+					A_nlink,
+					rsbac_attribute_value2))) {
+			rsbac_printk(KERN_WARNING
+					"vfs_rename() [sys_rename()]: rsbac_adf_set_attr() for DELETE returned error\n");
+		}
+	}
+#endif
+#ifdef CONFIG_RSBAC
+	if (!error) {
+		rsbac_new_target_id.dummy = 0;
+		rsbac_attribute_value.old_dir_inode_p = old_dir;
+		if (unlikely(rsbac_adf_set_attr(R_RENAME,
+					task_pid(current),
+					rsbac_target,
+					rsbac_target_id,
+					T_NONE,
+					rsbac_new_target_id,
+					A_old_dir_inode_p,
+					rsbac_attribute_value))) {
+			rsbac_printk(KERN_WARNING
+				"vfs_rename() [sys_rename()]: rsbac_adf_set_attr() for RENAME returned error\n");
+		}
+	}
+#endif
+
 	if (!is_dir || lock_old_subdir)
 		inode_unlock(source);
 	if (target && (!new_is_dir || lock_new_subdir))
@@ -5424,6 +6334,37 @@ int readlink_copy(char __user *buffer, int buflen, const char *link, int linklen
 	return copylen;
 }
 
+#ifdef CONFIG_RSBAC_SYM_REDIR
+int rsbac_readlink_copy(char __user *buffer, int buflen, const char *link, struct inode *inode)
+{
+	int len = PTR_ERR(link);
+	char * rsbac_name;
+
+	if (IS_ERR(link))
+		goto out;
+
+	len = strlen(link);
+	if (len > (unsigned) buflen)
+		len = buflen;
+
+	rsbac_name = rsbac_symlink_redirect(inode, link, TRUE);
+	if (rsbac_name) {
+		len = strlen(rsbac_name);
+		if (len > (unsigned) buflen)
+			len = buflen;
+		if (copy_to_user(buffer, rsbac_name, len))
+			len = -EFAULT;
+		kfree(rsbac_name);
+	}
+	else
+	if (copy_to_user(buffer, link, len))
+		len = -EFAULT;
+out:
+	return len;
+}
+EXPORT_SYMBOL(rsbac_readlink_copy);
+#endif
+
 /**
  * vfs_readlink - copy symlink body into userspace buffer
  * @dentry: dentry on which to get symbolic link
@@ -5462,7 +6403,11 @@ int vfs_readlink(struct dentry *dentry, char __user *buffer, int buflen)
 		if (IS_ERR(link))
 			return PTR_ERR(link);
 	}
+#ifdef CONFIG_RSBAC_SYM_REDIR
+	res = rsbac_readlink_copy(buffer, buflen, link, inode);
+#else
 	res = readlink_copy(buffer, buflen, link, strlen(link));
+#endif
 	do_delayed_call(&done);
 	return res;
 }
@@ -5576,7 +6521,11 @@ int page_readlink(struct dentry *dentry, char __user *buffer, int buflen)
 	link = page_get_link(dentry, d_inode(dentry), &done);
 	res = PTR_ERR(link);
 	if (!IS_ERR(link))
+#ifdef CONFIG_RSBAC_SYM_REDIR
+		res = rsbac_readlink_copy(buffer, buflen, link,	d_inode(dentry));
+#else
 		res = readlink_copy(buffer, buflen, link, strlen(link));
+#endif
 	do_delayed_call(&done);
 	return res;
 }

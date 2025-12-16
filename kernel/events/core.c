@@ -61,6 +61,8 @@
 
 #include <asm/irq_regs.h>
 
+#include <rsbac/hooks.h>
+
 typedef int (*remote_function_f)(void *);
 
 struct remote_function_call {
@@ -13428,6 +13430,11 @@ SYSCALL_DEFINE5(perf_event_open,
 	int f_flags = O_RDWR;
 	int cgroup_fd = -1;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t       rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	/* for future expandability... */
 	if (flags & ~PERF_FLAG_ALL)
 		return -EINVAL;
@@ -13485,6 +13492,20 @@ SYSCALL_DEFINE5(perf_event_open,
 
 	if (flags & PERF_FLAG_FD_CLOEXEC)
 		f_flags |= O_CLOEXEC;
+
+#ifdef CONFIG_RSBAC
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.scd = ST_perf;
+	rsbac_attribute_value.perf_flags = flags;
+	if (!rsbac_adf_request(R_MODIFY_SYSTEM_DATA,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_perf_flags,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	event_fd = get_unused_fd_flags(f_flags);
 	if (event_fd < 0)
