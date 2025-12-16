@@ -36,6 +36,8 @@
 
 #include <asm/syscall.h>	/* for syscall_get_* */
 
+#include <rsbac/hooks.h>
+
 /*
  * Access another process' address space via ptrace.
  * Source/target buffer must be kernel space,
@@ -1390,7 +1392,28 @@ SYSCALL_DEFINE4(ptrace, long, request, long, pid, unsigned long, addr,
 	struct task_struct *child;
 	long ret;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (request == PTRACE_TRACEME) {
+
+#ifdef CONFIG_RSBAC
+		rsbac_pr_debug(aef, "sys_ptrace(): calling ADF\n");
+		rsbac_target_id.process = task_pid(current);
+		rsbac_attribute_value.trace_request = PTRACE_TRACEME;
+		if (!rsbac_adf_request(R_TRACE,
+				rsbac_target_id.process,
+				T_PROCESS,
+				rsbac_target_id,
+				A_trace_request,
+				rsbac_attribute_value)) {
+			ret = -EPERM;
+			goto out;
+		}
+#endif
+
 		ret = ptrace_traceme();
 		goto out;
 	}
@@ -1400,6 +1423,23 @@ SYSCALL_DEFINE4(ptrace, long, request, long, pid, unsigned long, addr,
 		ret = -ESRCH;
 		goto out;
 	}
+
+#ifdef CONFIG_RSBAC
+	if (request != PTRACE_DETACH) {
+		rsbac_pr_debug(aef, "sys_ptrace(): calling ADF\n");
+		rsbac_target_id.process = task_pid(child);
+		rsbac_attribute_value.trace_request = request;
+		if (!rsbac_adf_request(R_TRACE,
+					task_pid(current),
+					T_PROCESS,
+					rsbac_target_id,
+					A_trace_request,
+					rsbac_attribute_value)) {
+			ret = -EPERM;
+			goto out_put_task_struct;
+		}
+	}
+#endif
 
 	if (request == PTRACE_ATTACH || request == PTRACE_SEIZE) {
 		ret = ptrace_attach(child, request, addr, data);
@@ -1529,7 +1569,28 @@ COMPAT_SYSCALL_DEFINE4(ptrace, compat_long_t, request, compat_long_t, pid,
 	struct task_struct *child;
 	long ret;
 
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+        union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (request == PTRACE_TRACEME) {
+
+#ifdef CONFIG_RSBAC
+		rsbac_pr_debug(aef, "compat_sys_ptrace(): calling ADF\n");
+		rsbac_target_id.process = task_pid(current);
+		rsbac_attribute_value.trace_request = PTRACE_TRACEME;
+		if (!rsbac_adf_request(R_TRACE,
+				rsbac_target_id.process,
+				T_PROCESS,
+				rsbac_target_id,
+				A_trace_request,
+				rsbac_attribute_value)) {
+			ret = -EPERM;
+			goto out;
+		}
+#endif
+
 		ret = ptrace_traceme();
 		goto out;
 	}
@@ -1539,6 +1600,23 @@ COMPAT_SYSCALL_DEFINE4(ptrace, compat_long_t, request, compat_long_t, pid,
 		ret = -ESRCH;
 		goto out;
 	}
+
+#ifdef CONFIG_RSBAC
+	if (request != PTRACE_DETACH) {
+		rsbac_pr_debug(aef, "compat_sys_ptrace(): calling ADF\n");
+		rsbac_target_id.process = task_pid(child);
+		rsbac_attribute_value.trace_request = request;
+		if (!rsbac_adf_request(R_TRACE,
+					task_pid(current),
+					T_PROCESS,
+					rsbac_target_id,
+					A_trace_request,
+					rsbac_attribute_value)) {
+			ret = -EPERM;
+			goto out_put_task_struct;
+		}
+	}
+#endif
 
 	if (request == PTRACE_ATTACH || request == PTRACE_SEIZE) {
 		ret = ptrace_attach(child, request, addr, data);

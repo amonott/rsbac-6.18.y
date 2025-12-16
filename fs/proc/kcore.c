@@ -34,6 +34,8 @@
 #include <asm/sections.h>
 #include "internal.h"
 
+#include <rsbac/hooks.h>
+
 #ifndef ELF_CORE_EFLAGS
 #define ELF_CORE_EFLAGS	0
 #endif
@@ -334,6 +336,24 @@ static ssize_t read_kcore_iter(struct kiocb *iocb, struct iov_iter *iter)
 	size_t buflen = iov_iter_count(iter);
 	size_t orig_buflen = buflen;
 	int ret = 0;
+
+#ifdef CONFIG_RSBAC
+        union rsbac_target_id_t rsbac_target_id;
+        union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
+#ifdef CONFIG_RSBAC
+        rsbac_target_id.scd = ST_kmem;
+        rsbac_attribute_value.dummy = 0;
+        rsbac_pr_debug(aef, "calling ADF\n");
+        if (!rsbac_adf_request(R_GET_STATUS_DATA,
+                              task_pid(current),
+                              T_SCD,
+                              rsbac_target_id,
+                              A_none,
+                              rsbac_attribute_value))
+          return -EPERM;
+#endif
 
 	percpu_down_read(&kclist_lock);
 	/*

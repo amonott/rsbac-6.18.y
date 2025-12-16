@@ -27,6 +27,11 @@
 #include "fsmap.h"
 #include <trace/events/ext4.h>
 
+#ifdef CONFIG_RSBAC
+#include <net/sock.h>
+#endif
+#include <rsbac/hooks.h>
+
 typedef void ext4_update_sb_callback(struct ext4_sb_info *sbi,
 				     struct ext4_super_block *es,
 				     const void *arg);
@@ -1531,6 +1536,94 @@ static long __ext4_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	struct inode *inode = file_inode(filp);
 	struct super_block *sb = inode->i_sb;
 	struct mnt_idmap *idmap = file_mnt_idmap(filp);
+
+#ifdef CONFIG_RSBAC
+	enum  rsbac_adf_request_t rsbac_request;
+	enum  rsbac_target_t rsbac_target = T_NONE;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+
+	rsbac_pr_debug(aef, "calling ADF\n");
+	switch (cmd) {
+		case FS_IOC_GETFLAGS:
+		case EXT4_IOC_GETVERSION:
+		case EXT4_IOC_GETVERSION_OLD:
+		case EXT4_IOC_GETRSVSZ:
+		case FS_IOC_GETFSMAP:
+		case FS_IOC_GET_ENCRYPTION_POLICY:
+		case FS_IOC_GET_ENCRYPTION_POLICY_EX:
+		case FS_IOC_GET_ENCRYPTION_KEY_STATUS:
+		case FS_IOC_GET_ENCRYPTION_NONCE:
+		case EXT4_IOC_GETSTATE:
+		case EXT4_IOC_GET_ES_CACHE:
+		case FS_IOC_MEASURE_VERITY:
+		case FS_IOC_READ_VERITY_METADATA:
+		case FITRIM:
+			rsbac_request = R_GET_PERMISSIONS_DATA;
+			break;
+		case FS_IOC_SETFLAGS:
+		case EXT4_IOC_SETVERSION:
+		case EXT4_IOC_SETVERSION_OLD:
+		case EXT4_IOC_SETRSVSZ:
+		case EXT4_IOC_GROUP_EXTEND:
+		case EXT4_IOC_MOVE_EXT:
+		case EXT4_IOC_GROUP_ADD:
+		case EXT4_IOC_MIGRATE:
+		case EXT4_IOC_ALLOC_DA_BLKS:
+		case EXT4_IOC_SWAP_BOOT:
+		case EXT4_IOC_RESIZE_FS:
+		case EXT4_IOC_PRECACHE_EXTENTS:
+		case FS_IOC_SET_ENCRYPTION_POLICY:
+		case FS_IOC_GET_ENCRYPTION_PWSALT:
+		case FS_IOC_ADD_ENCRYPTION_KEY:
+		case FS_IOC_REMOVE_ENCRYPTION_KEY:
+		case FS_IOC_REMOVE_ENCRYPTION_KEY_ALL_USERS:
+		case EXT4_IOC_CLEAR_ES_CACHE:
+		case EXT4_IOC_SHUTDOWN:
+		case FS_IOC_ENABLE_VERITY:
+		case EXT4_IOC_CHECKPOINT:
+			rsbac_request = R_MODIFY_PERMISSIONS_DATA;
+			break;
+		default:
+			rsbac_request = R_NONE;
+	}
+	if(S_ISSOCK(inode->i_mode)) {
+		if(SOCKET_I(inode)->ops
+				&& (SOCKET_I(inode)->ops->family == AF_UNIX)) {
+			rsbac_target = T_UNIXSOCK;
+			rsbac_target_id.unixsock.device = filp->f_path.dentry->d_sb->s_dev;
+			rsbac_target_id.unixsock.inode  = inode->i_ino;
+			rsbac_target_id.unixsock.dentry_p = filp->f_path.dentry;
+		}
+#ifdef CONFIG_RSBAC_NET_OBJ
+		else {
+			rsbac_target = T_NETOBJ;
+			rsbac_target_id.netobj.sock_p
+				= SOCKET_I(inode);
+			rsbac_target_id.netobj.local_addr = NULL;
+			rsbac_target_id.netobj.local_len = 0;
+			rsbac_target_id.netobj.remote_addr = NULL;
+			rsbac_target_id.netobj.remote_len = 0;
+		}
+#endif
+		}
+	else {
+		rsbac_target = T_DEV;
+		rsbac_target_id.dev.type = D_block;
+		rsbac_target_id.dev.major = RSBAC_MAJOR(filp->f_path.dentry->d_sb->s_dev);
+		rsbac_target_id.dev.minor = RSBAC_MINOR(filp->f_path.dentry->d_sb->s_dev);
+	}
+	rsbac_attribute_value.ioctl_cmd = cmd;
+	if(   (rsbac_request != R_NONE)
+		&& !rsbac_adf_request(rsbac_request,
+				task_pid(current),
+				rsbac_target,
+				rsbac_target_id,
+				A_ioctl_cmd,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	ext4_debug("cmd = %u, arg = %lu\n", cmd, arg);
 
