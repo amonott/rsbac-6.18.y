@@ -38,6 +38,11 @@
 #include <asm/tlbflush.h>
 #include <asm/tlb.h>
 
+#include <rsbac/hooks.h>
+#if defined(CONFIG_RSBAC_MPROTECT)
+#include <rsbac/getname.h>
+#endif
+
 #include "internal.h"
 
 static bool maybe_change_pte_writable(struct vm_area_struct *vma, pte_t pte)
@@ -870,6 +875,13 @@ static int do_mprotect_pkey(unsigned long start, size_t len,
 	struct mmu_gather tlb;
 	struct vma_iterator vmi;
 
+#ifdef CONFIG_RSBAC
+	enum  rsbac_target_t rsbac_target = T_NONE;
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+	int need_notify = FALSE;
+#endif
+
 	start = untagged_addr(start);
 
 	prot &= ~(PROT_GROWSDOWN|PROT_GROWSUP);
@@ -977,6 +989,107 @@ static int do_mprotect_pkey(unsigned long start, size_t len,
 		if (error)
 			break;
 
+#ifdef CONFIG_RSBAC
+		if ((prot & PROT_EXEC) && !(vma->vm_flags & PROT_EXEC)) {
+			rsbac_pr_debug(aef, "calling ADF\n");
+			if (vma->vm_file) {
+				if (vma->vm_file->f_path.dentry->d_inode->i_rsbac_memfd) {
+					rsbac_target = T_IPC;
+					rsbac_target_id.ipc.type = I_memfd;
+					rsbac_target_id.ipc.id.id_nr = (u_long) vma->vm_file->f_path.dentry->d_inode;
+				} else {
+			                rsbac_target = T_FILE;
+					rsbac_target_id.file.device = vma->vm_file->f_path.dentry->d_inode->i_sb->s_dev;
+					rsbac_target_id.file.inode = vma->vm_file->f_path.dentry->d_inode->i_ino;
+					rsbac_target_id.file.dentry_p = vma->vm_file->f_path.dentry;
+				}
+			} else {
+				rsbac_target = T_NONE;
+				rsbac_target_id.dummy = 0;
+			}
+			rsbac_attribute_value.prot_bits = prot;
+			if (!rsbac_adf_request(R_MAP_EXEC,
+						  task_pid(current),
+						  rsbac_target,
+						  rsbac_target_id,
+						  A_prot_bits,
+						  rsbac_attribute_value))
+			{
+				error = -EPERM;
+				break;
+			} else {
+			  need_notify = TRUE;
+			}
+		}
+#ifdef CONFIG_RSBAC_MPROTECT
+		if (   (   ((prot & PROT_EXEC) && !(vma->vm_flags & PROT_EXEC))
+		        || ((prot & PROT_WRITE) && !(vma->vm_flags & PROT_WRITE))
+		       )
+		    && !rsbac_write_exec_allowed(vma, prot)
+		   ) {
+			if (   ((prot & PROT_EXEC) && (prot & PROT_WRITE))
+			    || ((prot & PROT_EXEC) && (vma->vm_flags & PROT_WRITE))
+		            || ((prot & PROT_WRITE) && (vma->vm_flags & PROT_EXEC))
+			   ) {
+				char * program_name = rsbac_get_program_name();
+
+				if (vma->vm_file && vma->vm_file->f_path.dentry) {
+					char * help_name;
+
+#ifdef CONFIG_RSBAC_LOG_FULL_PATH
+					help_name = rsbac_kmalloc(CONFIG_RSBAC_MAX_PATH_LEN);
+					if (help_name) {
+						if (!(rsbac_get_full_path(vma->vm_file->f_path.dentry, help_name, CONFIG_RSBAC_MAX_PATH_LEN - 1) > 0))
+							strcpy(help_name, "(unknown)");
+					}
+#else
+					help_name = vma->vm_file->f_path.dentry->d_name.name;
+#endif
+					rsbac_printk(KERN_INFO "SYSC_mprotect(): RSBAC mprotect: denied WRITE and EXEC to %s, pid %u(%s)\n",
+							help_name ? help_name : "(unknown)", current->pid, program_name ? program_name : "(unknown)");
+#ifdef CONFIG_RSBAC_LOG_FULL_PATH
+					if (help_name)
+						rsbac_kfree(help_name);
+#endif
+				} else
+					rsbac_printk(KERN_INFO "SYSC_mprotect(): RSBAC mprotect: denied WRITE and EXEC, pid %u(%s)\n",
+							current->pid, program_name ? program_name : "(unknown)");
+				if (program_name)
+					rsbac_kfree(program_name);
+				error = -EPERM;
+				break;
+			}
+			if ((prot & PROT_EXEC) && (newflags & VM_MAYWRITE)) {
+#ifdef CONFIG_RSBAC_DEBUG
+				char * program_name = rsbac_get_program_name();
+				if (vma->vm_file && vma->vm_file->f_path.dentry)
+					rsbac_pr_debug(mprotect, "RSBAC mprotect: EXEC -> unset MAYWRITE for %s, pid %u(%s)\n",
+							vma->vm_file->f_path.dentry->d_name.name, current->pid, program_name ? program_name : "(unknown)");
+				else
+					rsbac_pr_debug(mprotect, "RSBAC mprotect: EXEC -> unset MAYWRITE, pid %u(%s)\n",
+							current->pid, program_name ? program_name : "(unknown)");
+				if (program_name)
+					rsbac_kfree(program_name);
+#endif
+				newflags &= ~VM_MAYWRITE;
+			} else if ((prot & PROT_WRITE) && (newflags & VM_MAYEXEC)) {
+#ifdef CONFIG_RSBAC_DEBUG
+				char * program_name = rsbac_get_program_name();
+				if (vma->vm_file && vma->vm_file->f_path.dentry)
+					rsbac_pr_debug(mprotect, "RSBAC mprotect: WRITE -> unset MAYEXEC for %s, pid %u(%s)\n",
+							vma->vm_file->f_path.dentry->d_name.name, current->pid, program_name ? program_name : "(unknown)");
+				else
+					rsbac_pr_debug(mprotect, "RSBAC mprotect: WRITE -> unset MAYEXEC, pid %u(%s)\n",
+							current->pid, program_name ? program_name : "(unknown)");
+				if (program_name)
+					rsbac_kfree(program_name);
+#endif
+				newflags &= ~VM_MAYEXEC;
+			}
+		}
+#endif
+#endif
+
 		tmp = vma->vm_end;
 		if (tmp > end)
 			tmp = end;
@@ -1002,6 +1115,28 @@ static int do_mprotect_pkey(unsigned long start, size_t len,
 
 out:
 	mmap_write_unlock(current->mm);
+
+	/* RSBAC: notify ADF of mapped segment */
+#ifdef CONFIG_RSBAC
+	if (need_notify && !error) {
+		union rsbac_target_id_t rsbac_new_target_id;
+
+		rsbac_pr_debug(aef, "calling ADF_set_attr\n");
+		rsbac_new_target_id.dummy = 0;
+		if (unlikely(rsbac_adf_set_attr(R_MAP_EXEC,
+					task_pid(current),
+					rsbac_target,
+					rsbac_target_id,
+					T_NONE,
+					rsbac_new_target_id,
+					A_none,
+					rsbac_attribute_value))) {
+			rsbac_printk(KERN_WARNING
+					"sys_mprotect: rsbac_adf_set_attr() returned error\n");
+		}
+	}
+#endif
+
 	return error;
 }
 
