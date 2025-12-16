@@ -53,6 +53,10 @@
 #include <generated/rq-offsets.h>
 #endif
 
+#if defined(CONFIG_RSBAC_CAP_LOG_MISSING) || defined(CONFIG_RSBAC_JAIL_LOG_MISSING)
+#include <rsbac/log_cap.h>
+#endif
+
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
 struct bio_list;
