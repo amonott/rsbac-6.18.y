@@ -32,6 +32,8 @@
 #include <linux/bsearch.h>
 #include <linux/btf_ids.h>
 
+#include <rsbac/hooks.h>
+
 #include "kallsyms_internal.h"
 
 /*
@@ -887,6 +889,27 @@ static int kallsyms_open(struct inode *inode, struct file *file)
 	 * using get_symbol_offset for every symbol.
 	 */
 	struct kallsym_iter *iter;
+
+#ifdef CONFIG_RSBAC
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
+#ifdef CONFIG_RSBAC
+	rsbac_target_id.scd = ST_ksyms;
+	rsbac_attribute_value.dummy = 0;
+	rsbac_pr_debug(aef, "calling ADF\n");
+	if(!rsbac_adf_request(R_GET_STATUS_DATA,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value))
+	{
+		return -EPERM;
+	}
+#endif
+
 	iter = __seq_open_private(file, &kallsyms_op, sizeof(*iter));
 	if (!iter)
 		return -ENOMEM;
