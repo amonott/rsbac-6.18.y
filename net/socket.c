@@ -2160,7 +2160,7 @@ int __sys_bind_socket(struct socket *sock, struct sockaddr_storage *address,
 #ifdef CONFIG_RSBAC_NET_OBJ
 	if (!err && sock->ops->family != AF_UNIX) {
 		rsbac_target_id.netobj.sock_p = sock;
-		rsbac_target_id.netobj.local_addr = (struct sockaddr *)&address;
+		rsbac_target_id.netobj.local_addr = (struct sockaddr *)address;
 		rsbac_target_id.netobj.local_len = addrlen;
 		rsbac_target_id.netobj.remote_addr = NULL;
 		rsbac_target_id.netobj.remote_len = 0;
