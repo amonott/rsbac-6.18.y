@@ -5,7 +5,7 @@
 /* (some smaller parts copied from fs/namei.c        */
 /*  and others)                                      */
 /*                                                   */
-/* Last modified: 15/Dec/2025                        */
+/* Last modified: 17/Dec/2025                        */
 /*************************************************** */
 
 #include <linux/types.h>
@@ -1542,12 +1542,6 @@ static int register_fd_lists(struct rsbac_device_list_item_t *device_p,
 			if (rsbac_list_lol_count(device_p->handles.res_min) == 0) {
 				rsbac_list_handle_t old_res_handle;
 
-#if 0
-				rsbac_printk(KERN_INFO "register_fd_lists(): RES list of lists %s for device %02u:%02u is empty, try to fill from old RES list %s!\n",
-					     RSBAC_RES_FD_MIN_NAME,
-					     major, minor,
-					     RSBAC_RES_OLD_FD_NAME);
-#endif
 				info_p->version = RSBAC_RES_FD_ACI_VERSION;
 				info_p->key = RSBAC_RES_FD_ACI_KEY;
 				info_p->desc_size = tmp_flags ? sizeof(rsbac_old_inode_nr_t) : sizeof(rsbac_inode_nr_t);
@@ -1653,12 +1647,6 @@ static int register_fd_lists(struct rsbac_device_list_item_t *device_p,
 			if (rsbac_list_lol_count(device_p->handles.res_max) == 0) {
 				rsbac_list_handle_t old_res_handle;
 
-#if 0
-				rsbac_printk(KERN_INFO "register_fd_lists(): RES list of lists %s for device %02u:%02u is empty, try to fill from old RES list %s!\n",
-					     RSBAC_RES_FD_MAX_NAME,
-					     major, minor,
-					     RSBAC_RES_OLD_FD_NAME);
-#endif
 				info_p->version = RSBAC_RES_FD_ACI_VERSION;
 				info_p->key = RSBAC_RES_FD_ACI_KEY;
 				info_p->desc_size = tmp_flags ? sizeof(rsbac_old_inode_nr_t) : sizeof(rsbac_inode_nr_t);
@@ -5281,11 +5269,6 @@ static int __init register_user_lists2(void)
 			if (rsbac_list_lol_count(user_handles.res_min) == 0) {
 				rsbac_list_handle_t old_res_handle;
 
-#if 0
-				rsbac_printk(KERN_DEBUG "register_user_lists2(): RES list of lists %s for users is empty, try to fill from old RES list %s!\n",
-					     RSBAC_RES_ACI_USER_MIN_NAME,
-					     RSBAC_RES_OLD_ACI_USER_NAME);
-#endif
 				list_info_p->version = RSBAC_RES_USER_ACI_VERSION;
 				list_info_p->key = RSBAC_RES_USER_ACI_KEY;
 				list_info_p->desc_size = sizeof(rsbac_uid_t);
@@ -5351,12 +5334,6 @@ static int __init register_user_lists2(void)
 						rsbac_kfree(ttl_p);
 					}
 					rsbac_list_detach(&old_res_handle, RSBAC_RES_USER_ACI_KEY);
-#if 0
-					rsbac_printk(KERN_DEBUG "register_user_lists(): RES list of lists %s got %lu items from old RES list %s!\n",
-						     RSBAC_RES_ACI_USER_MIN_NAME,
-						     item_count,
-						     RSBAC_RES_OLD_ACI_USER_NAME);
-#endif
 				}
 			}
 		}
@@ -5402,11 +5379,6 @@ static int __init register_user_lists2(void)
 			if (rsbac_list_lol_count(user_handles.res_max) == 0) {
 				rsbac_list_handle_t old_res_handle;
 
-#if 0
-				rsbac_printk(KERN_DEBUG "register_user_lists2(): RES list of lists %s for users is empty, try to fill from old RES list %s!\n",
-					     RSBAC_RES_ACI_USER_MAX_NAME,
-					     RSBAC_RES_OLD_ACI_USER_NAME);
-#endif
 				list_info_p->version = RSBAC_RES_USER_ACI_VERSION;
 				list_info_p->key = RSBAC_RES_USER_ACI_KEY;
 				list_info_p->desc_size = sizeof(rsbac_uid_t);
@@ -7141,6 +7113,7 @@ int rsbac_mount(struct vfsmount * vfsmount_p, struct vfsmount * vfsmount_parent_
 	}
 	if (RSBAC_IS_INVALID_PTR(vfsmount_p) || RSBAC_IS_INVALID_PTR(vfsmount_p->mnt_sb)) {
 		rsbac_printk(KERN_WARNING "rsbac_mount(): called with NULL or ERR pointer\n");
+		BUG();
 		return -RSBAC_EINVALIDPOINTER;
 	}
 	if (!rsbac_allow_mounts) {
@@ -7397,6 +7370,7 @@ int rsbac_umount(struct vfsmount *vfsmount_p)
 	}
 	if (!vfsmount_p) {
 		rsbac_printk(KERN_WARNING "rsbac_umount(): called with NULL pointer\n");
+		BUG();
 		return -RSBAC_EINVALIDPOINTER;
 	}
 	if (!rsbac_initialized) {
@@ -10730,10 +10704,6 @@ int rsbac_get_all_res_limits(
 		for (i = 0; i < item_count; i++) {
 			res_num = *((rsbac_res_desc_t *) tmp);
 			if (res_num >= RLIM_NLIMITS) {
-#if 0
-				rsbac_printk(KERN_DEBUG "%s: got res_num %u >= RLIM_NLIMITS %u, skipping\n",
-					     res_num, RLIM_NLIMITS);
-#endif
 				continue;
 			}
 			(*value_pp)[res_num] = *( (rsbac_res_limit_t *) (tmp + sizeof(rsbac_res_desc_t)) );
@@ -10747,10 +10717,6 @@ int rsbac_get_all_res_limits(
 		for (i = 0; i < item_count; i++) {
 			res_num = *((rsbac_res_desc_t *) tmp);
 			if (res_num >= RLIM_NLIMITS) {
-#if 0
-				rsbac_printk(KERN_DEBUG "%s: got res_num %u >= RLIM_NLIMITS %u, skipping\n",
-					     res_num, RLIM_NLIMITS);
-#endif
 				continue;
 			}
 			(*value_pp)[res_num] = *( (rsbac_res_limit_t *) (tmp + sizeof(rsbac_res_desc_t)) );
