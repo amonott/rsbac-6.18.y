@@ -7111,8 +7111,12 @@ int rsbac_mount(struct vfsmount * vfsmount_p, struct vfsmount * vfsmount_parent_
 				current->pid, current->comm);
 		return -RSBAC_EFROMINTERRUPT;
 	}
-	if (RSBAC_IS_INVALID_PTR(vfsmount_p) || RSBAC_IS_INVALID_PTR(vfsmount_p->mnt_sb)) {
-		WARN(1, "rsbac_mount(): called with NULL or ERR pointer\n");
+	if (RSBAC_IS_INVALID_PTR(vfsmount_p)) {
+		WARN(1, "rsbac_mount(): called with NULL or ERR vfsmount pointer\n");
+		return -RSBAC_EINVALIDPOINTER;
+	}
+	if (RSBAC_IS_INVALID_PTR(vfsmount_p->mnt_sb)) {
+		WARN(1, "rsbac_mount(): called with NULL or ERR vfsmount->mnt_sb pointer\n");
 		return -RSBAC_EINVALIDPOINTER;
 	}
 	if (!rsbac_allow_mounts) {
@@ -7368,7 +7372,7 @@ int rsbac_umount(struct vfsmount *vfsmount_p)
 		return -RSBAC_EFROMINTERRUPT;
 	}
 	if (!vfsmount_p) {
-		WARN(1, "rsbac_umount(): called with NULL pointer\n");
+		WARN(1, "rsbac_umount(): called with NULL vfsmount pointer\n");
 		return -RSBAC_EINVALIDPOINTER;
 	}
 	if (!rsbac_initialized) {
