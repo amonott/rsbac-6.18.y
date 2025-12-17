@@ -6,7 +6,7 @@
 /*                                                   */
 /* Author and (c) 1999-2025: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 16/Dec/2025                        */
+/* Last modified: 17/Dec/2025                        */
 /*************************************************** */
 
 #include <linux/string.h>
@@ -3129,41 +3129,12 @@ inline int rsbac_adf_set_attr_rc(enum rsbac_adf_request_t request,
 				}
 				/* set it for new target, if different */
 				if (i_attr_val1.rc_type != i_attr_val2.rc_type) {
-#if 0
-					if (rsbac_debug_adf_rc) {
-						char * target_id_name = rsbac_kmalloc(2 * RSBAC_MAXNAMELEN);
-
-						get_target_name(NULL, T_IPC, target_id_name, tid);
-						rsbac_pr_debug(adf_rc, "pid %u(%s), rc_role %u, IPC target %s, request CREATE: set rc_type to %u!\n",
-							pid_nr(caller_pid),
-							current->comm,
-							i_attr_val1.rc_role,
-							target_id_name,
-							i_attr_val1.rc_type);
-						rsbac_kfree(target_id_name);
-					}
-#endif
 					if ((err = rsbac_set_attr(SW_RC, target,
 							    tid, A_rc_type,
 							    i_attr_val1))) {
 						rsbac_pr_set_error_num(A_rc_type, err);
 						return -RSBAC_EWRITEFAILED;
 					}
-#if 0
-					if ((err = rsbac_get_attr(SW_RC,
-								  target,
-								  tid,
-								  A_rc_type,
-								  &i_attr_val2,
-								  FALSE))) {
-						rsbac_pr_get_error_num(A_rc_type, err);
-					} else {
-						if (i_attr_val1.rc_type != i_attr_val2.rc_type)
-							rsbac_pr_debug(adf_rc, "pid %u(%s), rc_role %u, IPC target %s, request CREATE: set rc_type to %u, but read %u!\n",
-							i_attr_val1.rc_type,
-							i_attr_val2.rc_type);
-					}
-#endif
 				}
 			}
 			return 0;
