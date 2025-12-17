@@ -5,7 +5,7 @@
 /*                                                   */
 /* Author and (c) 1999-2025: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 16/Dec/2025                        */
+/* Last modified: 17/Dec/2025                        */
 /*************************************************** */
 
 #include <linux/string.h>
@@ -2597,14 +2597,6 @@ char * rsbac_symlink_redirect(
           }
         addr = i_attr_val.remote_ip;
         len = strlen(name);
-#if 0
-        while(   len
-              && (name[len-1] >= '0')
-              && (name[len-1] <= '9')
-             )
-          len--;
-
-#endif
         new_name = kmalloc(len + 20, kmalloc_gfp);
         if(!new_name)
           {
