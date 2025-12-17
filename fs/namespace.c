@@ -3927,15 +3927,6 @@ static int do_new_mount_fc(struct fs_context *fc, const struct path *mountpoint,
 	error = do_add_mount(real_mount(mnt), &mp, mnt_flags);
 	if (!error)
 		retain_and_null_ptr(mnt); // consumed on success
-
-#ifdef CONFIG_RSBAC
-	if (error >= 0) {
-		rsbac_pr_debug(ds, "calling rsbac_mount() for device %02u:%02u\n",
-				RSBAC_MAJOR((&real_mount(mnt)->mnt)->mnt_sb->s_dev), RSBAC_MINOR((&real_mount(mnt)->mnt)->mnt_sb->s_dev));
-		rsbac_mount(&real_mount(mnt)->mnt, real_mount(mountpoint->mnt) ? &real_mount(mountpoint->mnt)->mnt : NULL);
-	}
-#endif
-
 	return error;
 }
 
@@ -4042,17 +4033,19 @@ int finish_automount(struct vfsmount *__m, const struct path *path)
 	 */
 	LOCK_MOUNT_EXACT(mp, path);
 	if (mp.parent == ERR_PTR(-EBUSY))
-
-#ifdef CONFIG_RSBAC
-	rsbac_pr_debug(ds, "calling rsbac_mount() for device %02u:%02u\n",
-			RSBAC_MAJOR((&mnt->mnt)->mnt_sb->s_dev), RSBAC_MINOR((&mnt->mnt)->mnt_sb->s_dev));
-	rsbac_mount(&mnt->mnt, real_mount(path->mnt) ? &real_mount(path->mnt)->mnt : NULL);
-#endif
 		return 0;
 
 	err = do_add_mount(mnt, &mp, path->mnt->mnt_flags | MNT_SHRINKABLE);
-	if (likely(!err))
+	if (likely(!err)) {
+
+#ifdef CONFIG_RSBAC
+		rsbac_pr_debug(ds, "calling rsbac_mount() for device %02u:%02u\n",
+				RSBAC_MAJOR((&mnt->mnt)->mnt_sb->s_dev), RSBAC_MINOR((&mnt->mnt)->mnt_sb->s_dev));
+		rsbac_mount(&mnt->mnt, real_mount(path->mnt) ? &real_mount(path->mnt)->mnt : NULL);
+#endif
+
 		retain_and_null_ptr(m);
+	}
 	return err;
 }
 
