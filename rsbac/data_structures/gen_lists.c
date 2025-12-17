@@ -1,9 +1,9 @@
 /************************************* */
 /* Rule Set Based Access Control       */
-/* Author and (c) 1999-2024:           */
+/* Author and (c) 1999-2025:           */
 /*   Amon Ott <ao@rsbac.org>           */
 /* Generic lists for all parts         */
-/* Last modified: 15/Dec/2024          */
+/* Last modified: 17/Dec/2025          */
 /************************************* */
 
 #include <linux/sched.h>
@@ -193,17 +193,6 @@ static void rcu_free(struct rsbac_list_reg_item_t * list, u_int hash, void * mem
 #ifdef CONFIG_RSBAC_LIST_STATS
 	data_race(rcu_free_calls++);
 #endif
-#if 0
-	/* Sanity check for dupes - to be removed after test phase */
-	rcu_item = list->hashed[hash].rcu_free->head;
-	while (rcu_item) {
-		if (unlikely(rcu_item->mem == mem)) {
-			BUG();
-			return;
-		}
-		rcu_item = rcu_item->next;
-	}
-#endif
 	rcu_item = rsbac_smalloc(rcu_free_item_slab);
 	if (likely(rcu_item)) {
 		rcu_item->mem = mem;
@@ -232,17 +221,6 @@ static void rcu_free_lol(struct rsbac_list_lol_reg_item_t * list, u_int hash, vo
 #ifdef CONFIG_RSBAC_LIST_STATS
 	data_race(rcu_free_lol_calls++);
 #endif
-#if 0
-	/* Sanity check for dupes - to be removed after test phase  */
-	rcu_item = list->hashed[hash].rcu_free->head;
-	while (rcu_item) {
-		if (unlikely(rcu_item->mem == mem)) {
-			BUG();
-			return;
-		}
-		rcu_item = rcu_item->next;
-	}
-#endif
 	rcu_item = rsbac_smalloc(rcu_free_item_slab);
 	if (likely(rcu_item)) {
 		rcu_item->mem = mem;
@@ -270,17 +248,6 @@ static void rcu_free_lol_sub(struct rsbac_list_lol_reg_item_t * list, u_int hash
 	}
 #ifdef CONFIG_RSBAC_LIST_STATS
 	data_race(rcu_free_lol_calls++);
-#endif
-#if 0
-	/* Sanity check for dupes - to be removed after test phase  */
-	rcu_item = list->hashed[hash].rcu_free->subhead;
-	while (rcu_item) {
-		if (unlikely(rcu_item->mem == mem)) {
-			BUG();
-			return;
-		}
-		rcu_item = rcu_item->next;
-	}
 #endif
 	rcu_item = rsbac_smalloc(rcu_free_item_slab);
 	if (likely(rcu_item)) {
@@ -7556,11 +7523,6 @@ int rsbac_list_destroy(rsbac_list_handle_t * handle_p,
 	}
 #endif
 
-#if 0
-	if (reg_item_p->flags & RSBAC_LIST_PERSIST)
-		err = unlink_list(reg_item_p);
-#endif
-
 	spin_lock(&reg_head.lock);
 	remove_reg(reg_item_p);
 	*handle_p = NULL;
@@ -7613,10 +7575,6 @@ int rsbac_list_lol_destroy(rsbac_list_handle_t * handle_p,
 		remove_proc_entry(reg_item_p->name, proc_rsbac_backup_p);
 		reg_item_p->proc_entry_p = NULL;
 	}
-#endif
-#if 0
-	if (reg_item_p->flags & RSBAC_LIST_PERSIST)
-		err = unlink_lol_list(reg_item_p);
 #endif
 
 	spin_lock(&lol_reg_head.lock);
