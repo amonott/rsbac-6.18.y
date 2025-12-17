@@ -3,7 +3,7 @@
 /* Author and (c) 1999-2025:           */
 /*   Amon Ott <ao@rsbac.org>           */
 /* Helper functions for all parts      */
-/* Last modified: 15/Dec/2025          */
+/* Last modified: 17/Dec/2025          */
 /************************************* */
 
 #include <rsbac/types.h>
@@ -425,12 +425,6 @@ rsbac_boolean_t rsbac_cap_hide_fd(struct inode * target_inode)
 	   || rsbac_ind_softmode[SW_CAP]
 #endif
 	) {
-#if 0
-		rsbac_pr_debug(adf_cap, "running in softmode, FD hiding not applied to process %u(%s) with owner %u!\n",
-				pid_nr(task_pid(current)),
-				current->comm,
-				current_uid());
-#endif
 		return FALSE;
 	}
 #endif
