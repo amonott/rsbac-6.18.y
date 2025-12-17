@@ -4,11 +4,11 @@
 /* Facility (ADF) - Mandatory Access Control         */
 /* File: rsbac/adf/mac/main.c                        */
 /*                                                   */
-/* Author and (c) 1999-2024: Amon Ott <ao@rsbac.org> */
+/* Author and (c) 1999-2025: Amon Ott <ao@rsbac.org> */
 /* MAC_LIGHT Modifications (c) 2000 Stanislav Ievlev */
 /*                     and (c) 2001 Amon Ott         */
 /*                                                   */
-/* Last modified: 14/Nov/2024                        */
+/* Last modified: 17/Dec/2025                        */
 /*************************************************** */
 
 #include <linux/string.h>
@@ -3679,13 +3679,6 @@ inline int rsbac_adf_set_attr_mac(enum rsbac_adf_request_t request,
 				    ("rsbac_adf_set_attr_mac", A_initial_security_level);
 				return (-RSBAC_EWRITEFAILED);
 			}
-#if 0
-			/* restrict current_level to be a maximum of min_write */
-			if (i_attr_val6.security_level >
-			    i_attr_val4.min_write_open)
-				i_attr_val6.security_level =
-				    i_attr_val4.min_write_open;
-#endif
 			if (rsbac_get_attr(SW_MAC,
 					   T_USER,
 					   i_tid,
@@ -3704,13 +3697,6 @@ inline int rsbac_adf_set_attr_mac(enum rsbac_adf_request_t request,
 				    ("rsbac_adf_set_attr_mac", A_mac_initial_categories);
 				return (-RSBAC_EWRITEFAILED);
 			}
-#if 0
-			/* restrict current_categories to be a maximum of min_write */
-			if ((i_attr_val7.mac_categories & i_attr_val5.
-			     mac_categories) != i_attr_val7.mac_categories)
-				i_attr_val7.mac_categories &=
-				    i_attr_val5.mac_categories;
-#endif
 			/* Get owner-min-sec-level and mac_min_categories for new owner */
 			i_tid.user = owner;
 			if (rsbac_get_attr(SW_MAC,
@@ -3784,13 +3770,6 @@ inline int rsbac_adf_set_attr_mac(enum rsbac_adf_request_t request,
 					return (-RSBAC_EWRITEFAILED);
 				}
 			}
-#if 0
-			/* adjust current sec level to a minimum of max_read */
-			if (i_attr_val6.security_level <
-			    i_attr_val4.max_read_open)
-				i_attr_val6.security_level =
-				    i_attr_val4.max_read_open;
-#endif
 			/* but never set it over new max_level or under new min_level */
 			if (i_attr_val6.security_level >
 			    i_attr_val2.security_level)
@@ -3825,13 +3804,6 @@ inline int rsbac_adf_set_attr_mac(enum rsbac_adf_request_t request,
 					return (-RSBAC_EWRITEFAILED);
 				}
 			}
-#if 0
-			/* adjust current categories to include all from max_read (from initial) */
-			if ((i_attr_val7.mac_categories & i_attr_val5.
-			     mac_categories) != i_attr_val5.mac_categories)
-				i_attr_val7.mac_categories |=
-				    i_attr_val5.mac_categories;
-#endif
 			/* but never set it over new max_cats or under new min_cats */
 			if ((i_attr_val7.mac_categories & i_attr_val3.
 			     mac_categories) != i_attr_val7.mac_categories)
@@ -4444,18 +4416,6 @@ inline int rsbac_adf_set_attr_mac(enum rsbac_adf_request_t request,
 				return (-RSBAC_EWRITEFAILED);
 			}
 #endif
-#if 0
-			/* Now, set min_write_open to process owner's seclevel */
-			if (rsbac_get_attr(SW_MAC,
-					   T_PROCESS,
-					   i_tid,
-					   A_security_level,
-					   &i_attr_val1, FALSE)) {
-				rsbac_ds_get_error
-				    ("rsbac_adf_set_attr_mac", A_security_level);
-				return (-RSBAC_EREADFAILED);
-			}
-#endif
 			i_attr_val1.min_write_open = SL_max;
 			if (rsbac_set_attr(SW_MAC,
 					   T_PROCESS,
@@ -4466,18 +4426,6 @@ inline int rsbac_adf_set_attr_mac(enum rsbac_adf_request_t request,
 				    ("rsbac_adf_set_attr_mac", A_none);
 				return (-RSBAC_EWRITEFAILED);
 			}
-#if 0
-			/* Next, set min_write_categories to process owner's mac_categories */
-			if (rsbac_get_attr(SW_MAC,
-					   T_PROCESS,
-					   i_tid,
-					   A_mac_categories,
-					   &i_attr_val2, FALSE)) {
-				rsbac_ds_get_error
-				    ("rsbac_adf_set_attr_mac", A_mac_categories);
-				return (-RSBAC_EREADFAILED);
-			}
-#endif
 			i_attr_val2.mac_categories =
 			    RSBAC_MAC_MAX_CAT_VECTOR;
 			if (rsbac_set_attr
@@ -4488,27 +4436,6 @@ inline int rsbac_adf_set_attr_mac(enum rsbac_adf_request_t request,
 				return (-RSBAC_EWRITEFAILED);
 			}
 			/* reset max_read boundary */
-#if 0
-			/* Get owner-min-sec-level and mac_min_categories for owner */
-			if (rsbac_get_attr(SW_MAC,
-					   T_PROCESS,
-					   i_tid,
-					   A_min_security_level,
-					   &i_attr_val1, FALSE)) {
-				rsbac_ds_get_error
-				    ("rsbac_adf_set_attr_mac", A_min_security_level);
-				return (-RSBAC_EREADFAILED);
-			}
-			if (rsbac_get_attr(SW_MAC,
-					   T_PROCESS,
-					   i_tid,
-					   A_mac_min_categories,
-					   &i_attr_val2, FALSE)) {
-				rsbac_ds_get_error
-				    ("rsbac_adf_set_attr_mac", A_mac_min_categories);
-				return (-RSBAC_EREADFAILED);
-			}
-#endif
 			i_attr_val1.max_read_open = SL_min;
 			i_attr_val2.mac_categories =
 			    RSBAC_MAC_MIN_CAT_VECTOR;
