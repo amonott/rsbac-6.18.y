@@ -2810,25 +2810,6 @@ static bool tcf_chain_dump(struct tcf_chain *chain, struct Qdisc *q, u32 parent,
 	struct tcf_proto *tp, *tp_prev;
 	struct tcf_dump_args arg;
 
-#ifdef CONFIG_RSBAC_NET
-	union rsbac_target_id_t rsbac_target_id;
-	union rsbac_attribute_value_t rsbac_attribute_value;
-#endif
-
-#ifdef CONFIG_RSBAC_NET
-	rsbac_pr_debug(aef, "calling ADF\n");
-	rsbac_target_id.scd = ST_network;
-	rsbac_attribute_value.dummy = 0;
-	if (!rsbac_adf_request(R_GET_STATUS_DATA,
-				task_pid(current),
-				T_SCD,
-				rsbac_target_id,
-				A_none,
-				rsbac_attribute_value)) {
-		return -EPERM;
-	}
-#endif
-
 	for (tp = __tcf_get_next_proto(chain, NULL);
 	     tp;
 	     tp_prev = tp,
@@ -2900,8 +2881,27 @@ static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
 	u32 parent;
 	int err;
 
+#ifdef CONFIG_RSBAC_NET
+	union rsbac_target_id_t rsbac_target_id;
+	union rsbac_attribute_value_t rsbac_attribute_value;
+#endif
+
 	if (nlmsg_len(cb->nlh) < sizeof(*tcm))
 		return skb->len;
+
+#ifdef CONFIG_RSBAC_NET
+	rsbac_pr_debug(aef, "calling ADF\n");
+	rsbac_target_id.scd = ST_network;
+	rsbac_attribute_value.dummy = 0;
+	if (!rsbac_adf_request(R_GET_STATUS_DATA,
+				task_pid(current),
+				T_SCD,
+				rsbac_target_id,
+				A_none,
+				rsbac_attribute_value)) {
+		return -EPERM;
+	}
+#endif
 
 	err = nlmsg_parse_deprecated(cb->nlh, sizeof(*tcm), tca, TCA_MAX,
 				     tcf_tfilter_dump_policy, cb->extack);
