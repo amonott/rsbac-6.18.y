@@ -2196,14 +2196,16 @@ static int unix_accept(struct socket *sock, struct socket *newsock,
 #ifdef CONFIG_RSBAC
 	/* copy dentry and mnt, if there */
 	if (unix_sk(sk)->path.dentry) {
-		if (!unix_sk(tsk)->path.dentry) {
+		if (!unix_sk(tsk)->path.dentry)
 			unix_sk(tsk)->path.dentry = dget(unix_sk(sk)->path.dentry);
-			unix_sk(tsk)->path.mnt = mntget(unix_sk(sk)->path.mnt);
-		}
-		if (newsock->sk && !unix_sk(newsock->sk)->path.dentry) {
+		if (newsock->sk && !unix_sk(newsock->sk)->path.dentry)
 			unix_sk(newsock->sk)->path.dentry = dget(unix_sk(sk)->path.dentry);
+	}
+	if (unix_sk(sk)->path.mnt) {
+		if (!unix_sk(tsk)->path.mnt)
+			unix_sk(tsk)->path.mnt = mntget(unix_sk(sk)->path.mnt);
+		if (newsock->sk && !unix_sk(newsock->sk)->path.mnt)
 			unix_sk(newsock->sk)->path.mnt = mntget(unix_sk(sk)->path.mnt);
-		}
 	}
 #endif
 
