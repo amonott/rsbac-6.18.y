@@ -6337,30 +6337,29 @@ int readlink_copy(char __user *buffer, int buflen, const char *link, int linklen
 #ifdef CONFIG_RSBAC_SYM_REDIR
 int rsbac_readlink_copy(char __user *buffer, int buflen, const char *link, struct inode *inode)
 {
-	int len = PTR_ERR(link);
+	int copylen;
 	char * rsbac_name;
 
 	if (IS_ERR(link))
 		goto out;
 
-	len = strlen(link);
-	if (len > (unsigned) buflen)
-		len = buflen;
+	copylen = strlen(link);
+	if (unlikely(copylen > (unsigned) buflen))
+		copylen = buflen;
 
 	rsbac_name = rsbac_symlink_redirect(inode, link, TRUE);
 	if (rsbac_name) {
-		len = strlen(rsbac_name);
-		if (len > (unsigned) buflen)
-			len = buflen;
-		if (copy_to_user(buffer, rsbac_name, len))
-			len = -EFAULT;
+		copylen = strlen(rsbac_name);
+		if (unlikely(copylen > (unsigned) buflen))
+			copylen = buflen;
+		if (copy_to_user(buffer, rsbac_name, copylen))
+			copylen = -EFAULT;
 		kfree(rsbac_name);
+	} else if (copy_to_user(buffer, link, copylen)) {
+		copylen = -EFAULT;
 	}
-	else
-	if (copy_to_user(buffer, link, len))
-		len = -EFAULT;
 out:
-	return len;
+	return copylen;
 }
 EXPORT_SYMBOL(rsbac_readlink_copy);
 #endif
