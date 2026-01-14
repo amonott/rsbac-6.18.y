@@ -1,11 +1,11 @@
 /*************************************************** */
 /* Rule Set Based Access Control                     */
 /* Implementation of ACI data structures             */
-/* Author and (c) 1999-2025: Amon Ott <ao@rsbac.org> */
+/* Author and (c) 1999-2026: Amon Ott <ao@rsbac.org> */
 /* (some smaller parts copied from fs/namei.c        */
 /*  and others)                                      */
 /*                                                   */
-/* Last modified: 17/Dec/2025                        */
+/* Last modified: 14/Jan/2026                        */
 /*************************************************** */
 
 #include <linux/types.h>
@@ -7920,11 +7920,12 @@ int rsbac_get_parent(enum rsbac_target_t target,
 		device_p = lookup_device(major, minor, hash);
 		if (   !device_p
 		    || !device_p->vfsmount_p
+		    || RSBAC_IS_INVALID_PTR(real_mount(device_p->vfsmount_p))
 		    || RSBAC_IS_INVALID_PTR(real_mount(device_p->vfsmount_p)->mnt_mountpoint)
 		    || RSBAC_IS_INVALID_PTR(real_mount(device_p->vfsmount_p)->mnt_mountpoint->d_parent)
 		    || (real_mount(device_p->vfsmount_p)->mnt_mountpoint->d_parent == real_mount(device_p->vfsmount_p)->mnt_mountpoint)
 		    || RSBAC_IS_INVALID_PTR(real_mount(device_p->vfsmount_p)->mnt_mountpoint->d_parent->d_sb)
-		    || !real_mount(device_p->vfsmount_p)->mnt_mountpoint->d_parent->d_inode
+		    || RSBAC_IS_INVALID_PTR(real_mount(device_p->vfsmount_p)->mnt_mountpoint->d_parent->d_inode)
 		    || !real_mount(device_p->vfsmount_p)->mnt_mountpoint->d_parent->d_inode->i_ino
 		    || RSBAC_IS_INVALID_PTR(real_mount(device_p->vfsmount_p)->mnt_mountpoint->d_sb)
 		    || !real_mount(device_p->vfsmount_p)->mnt_mountpoint->d_sb->s_dev
