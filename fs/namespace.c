@@ -3414,7 +3414,7 @@ static int do_remount(const struct path *path, int sb_flags,
 	err = parse_monolithic_mount_data(fc, data);
 	if (!err) {
 #ifdef CONFIG_RSBAC
-		rsbac_pr_debug(aef, "[do_mount() [sys_mount()]]: calling ADF for DIR\n");
+		rsbac_pr_debug(aef, "[do_remount() [sys_mount()]]: calling ADF for DIR\n");
 		rsbac_target_id.dir.device = path->dentry->d_sb->s_dev;
 		rsbac_target_id.dir.inode  = path->dentry->d_inode->i_ino;
 		rsbac_target_id.dir.dentry_p = path->dentry;
@@ -3429,7 +3429,7 @@ static int do_remount(const struct path *path, int sb_flags,
 			put_fs_context(fc);
 			return -EPERM;
 		}
-		rsbac_pr_debug(aef, "[do_mount() [sys_mount()]]: calling ADF for DEV\n");
+		rsbac_pr_debug(aef, "[do_remount() [sys_mount()]]: calling ADF for DEV\n");
 		rsbac_target_id.dev.type = D_block;
 		rsbac_target_id.dev.major = RSBAC_MAJOR(sb->s_dev);
 		rsbac_target_id.dev.minor = RSBAC_MINOR(sb->s_dev);
