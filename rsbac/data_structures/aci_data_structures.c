@@ -5,7 +5,7 @@
 /* (some smaller parts copied from fs/namei.c        */
 /*  and others)                                      */
 /*                                                   */
-/* Last modified: 14/Jan/2026                        */
+/* Last modified: 20/Jan/2026                        */
 /*************************************************** */
 
 #include <linux/types.h>
@@ -8009,16 +8009,20 @@ static int get_attr_fd(rsbac_list_ta_number_t ta_number,
 		device_p = lookup_device(major, minor, hash);
 		if (unlikely(!device_p)) {
 			srcu_read_unlock(&device_list_srcu[hash], srcu_idx);
-			if (   tid_p->file.dentry_p
-			    && tid_p->file.dentry_p->d_sb
-			    && tid_p->file.dentry_p->d_sb->s_type
-			    && tid_p->file.dentry_p->d_sb->s_type->name
-			   )
-				WARN_ONCE(1, "rsbac_get_attr(): unknown device %02u:%02u (type %s), returning default value!\n",
-					major, minor, tid_p->file.dentry_p->d_sb->s_type->name);
-			else
-				WARN_ONCE(1, "rsbac_get_attr(): unknown device %02u:%02u, returning default value!\n",
-					major, minor);
+#ifdef CONFIG_RSBAC_DEBUG
+			if (rsbac_debug_ds) {
+				if (   tid_p->file.dentry_p
+				    && tid_p->file.dentry_p->d_sb
+				    && tid_p->file.dentry_p->d_sb->s_type
+				    && tid_p->file.dentry_p->d_sb->s_type->name
+				   )
+					WARN_ONCE(1, "rsbac_get_attr(): unknown device %02u:%02u (type %s), returning default value!\n",
+						major, minor, tid_p->file.dentry_p->d_sb->s_type->name);
+				else
+					WARN_ONCE(1, "rsbac_get_attr(): unknown device %02u:%02u, returning default value!\n",
+						major, minor);
+			}
+#endif
 		}
 
 #ifdef CONFIG_RSBAC_FD_CACHE
@@ -10776,15 +10780,19 @@ static int set_attr_fd_ttl(rsbac_list_ta_number_t ta_number,
 	device_p = lookup_device(major, minor, hash);
 	if (unlikely(!device_p)) {
 		srcu_read_unlock(&device_list_srcu[hash], srcu_idx);
-		if (   tid_p->file.dentry_p
-		    && tid_p->file.dentry_p->d_sb
-		    && tid_p->file.dentry_p->d_sb->s_type
-		    && tid_p->file.dentry_p->d_sb->s_type->name)
-			WARN_ONCE(1, "rsbac_set_attr_fd(): unknown device %02u:%02u (type %s), cannot set attribute!\n",
-				major, minor, tid_p->file.dentry_p->d_sb->s_type->name);
-		else
-			WARN_ONCE(1, "rsbac_set_attr_fd(): unknown device %02u:%02u, cannot set attribute!\n",
-				major, minor);
+#ifdef CONFIG_RSBAC_DEBUG
+		if (rsbac_debug_ds) {
+			if (   tid_p->file.dentry_p
+			    && tid_p->file.dentry_p->d_sb
+			    && tid_p->file.dentry_p->d_sb->s_type
+			    && tid_p->file.dentry_p->d_sb->s_type->name)
+				WARN_ONCE(1, "rsbac_set_attr_fd(): unknown device %02u:%02u (type %s), cannot set attribute!\n",
+					major, minor, tid_p->file.dentry_p->d_sb->s_type->name);
+			else
+				WARN_ONCE(1, "rsbac_set_attr_fd(): unknown device %02u:%02u, cannot set attribute!\n",
+					major, minor);
+		}
+#endif
 		/* Normally, we would return -RSBAC_EINVALIDDEV here.
 		 * To avoid cascades of further error messages, we just return 0
 		 * to let the calling function assume the value has been set.
@@ -12704,15 +12712,19 @@ int rsbac_ta_remove_target(rsbac_list_ta_number_t ta_number,
 		device_p = lookup_device(major, minor, hash);
 		if (unlikely(!device_p)) {
 			srcu_read_unlock(&device_list_srcu[hash], srcu_idx);
-			if (   tid_p->file.dentry_p
-			    && tid_p->file.dentry_p->d_sb
-			    && tid_p->file.dentry_p->d_sb->s_type
-			    && tid_p->file.dentry_p->d_sb->s_type->name)
-				WARN_ONCE(1, "rsbac_ta_remove_target(): unknown device %02u:%02u (type %s), cannot remove attributes!\n",
-					major, minor, tid_p->file.dentry_p->d_sb->s_type->name);
-			else
-				WARN_ONCE(1, "rsbac_ta_remove_target(): unknown device %02u:%02u, cannot remove attributes!\n",
-					major, minor);
+#ifdef CONFIG_RSBAC_DEBUG
+			if (rsbac_debug_ds) {
+				if (   tid_p->file.dentry_p
+				    && tid_p->file.dentry_p->d_sb
+				    && tid_p->file.dentry_p->d_sb->s_type
+				    && tid_p->file.dentry_p->d_sb->s_type->name)
+					WARN_ONCE(1, "rsbac_ta_remove_target(): unknown device %02u:%02u (type %s), cannot remove attributes!\n",
+						major, minor, tid_p->file.dentry_p->d_sb->s_type->name);
+				else
+					WARN_ONCE(1, "rsbac_ta_remove_target(): unknown device %02u:%02u, cannot remove attributes!\n",
+						major, minor);
+			}
+#endif
 			/* Normally, we would return -RSBAC_EINVALIDDEV here.
 			 * To avoid cascades of further error messages, we just return 0
 			 * to let the calling function assume that all is fine.
