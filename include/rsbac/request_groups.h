@@ -189,6 +189,7 @@
   ((rsbac_request_vector_t) 1 << R_DELETE) | \
   ((rsbac_request_vector_t) 1 << R_GET_PERMISSIONS_DATA) | \
   ((rsbac_request_vector_t) 1 << R_GET_STATUS_DATA) | \
+  ((rsbac_request_vector_t) 1 << R_LINK_HARD) | \
   ((rsbac_request_vector_t) 1 << R_MODIFY_ATTRIBUTE) | \
   ((rsbac_request_vector_t) 1 << R_MODIFY_PERMISSIONS_DATA) | \
   ((rsbac_request_vector_t) 1 << R_MODIFY_SYSTEM_DATA) | \
