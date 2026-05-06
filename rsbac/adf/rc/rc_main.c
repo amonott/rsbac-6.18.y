@@ -4,9 +4,9 @@
 /* Facility (ADF) - Role Compatibility               */
 /* File: rsbac/adf/rc/main.c                         */
 /*                                                   */
-/* Author and (c) 1999-2025: Amon Ott <ao@rsbac.org> */
+/* Author and (c) 1999-2026: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 17/Dec/2025                        */
+/* Last modified: 06/May/2026                        */
 /*************************************************** */
 
 #include <linux/string.h>
@@ -1829,6 +1829,7 @@ rsbac_adf_request_rc(enum rsbac_adf_request_t request,
 		case T_UNIXSOCK:
 		case T_FIFO:
 		case T_SYMLINK:
+		case T_IPC:
 			return check_comp_rc (target, tid, request, caller_pid);
 
 			/* all other cases are unknown */
