@@ -4,9 +4,9 @@
 /* Facility (ADF) - check for well defined requests  */
 /* File: rsbac/adf/check.c                           */
 /*                                                   */
-/* Author and (c) 1999-2024: Amon Ott <ao@rsbac.org> */
+/* Author and (c) 1999-2026: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 14/Nov/2024                        */
+/* Last modified: 06/May/2026                        */
 /*************************************************** */
 
 #include <linux/string.h>
@@ -459,6 +459,7 @@ rsbac_adf_request_check(enum rsbac_adf_request_t request,
 		case T_UNIXSOCK:
 		case T_FIFO:
 		case T_SYMLINK:
+		case T_IPC:
 			return DO_NOT_CARE;
 			/* all other cases are undefined */
 		default:
