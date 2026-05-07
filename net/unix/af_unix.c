@@ -1702,7 +1702,7 @@ restart:
 #ifdef CONFIG_RSBAC
 		rsbac_pr_debug(aef, "[sys_connect() [sys_socketcall()]]: calling ADF\n");
 		/* Named socket? */
-		if(sunaddr->sun_path[0]) {
+		if(sunaddr->sun_path[0] && unix_sk(other)->path.dentry) {
 			rsbac_target = T_UNIXSOCK;
 			rsbac_target_id.unixsock.device = unix_sk(other)->path.dentry->d_sb->s_dev;
 			rsbac_target_id.unixsock.inode  = unix_sk(other)->path.dentry->d_inode->i_ino;
@@ -1710,7 +1710,10 @@ restart:
 		} else {
 			rsbac_target = T_IPC;
 			rsbac_target_id.ipc.type = I_anonunix;
-			rsbac_target_id.ipc.id.id_nr = unix_sk(other)->path.dentry->d_inode->i_ino;
+			if (unix_sk(other)->path.dentry)
+				rsbac_target_id.ipc.id.id_nr = unix_sk(other)->path.dentry->d_inode->i_ino;
+			else
+				rsbac_target_id.ipc.id.id_nr = 0;
 		}
 		if (   other->sk_peer_pid
 		    && (pid_nr(other->sk_peer_pid) > 0)
