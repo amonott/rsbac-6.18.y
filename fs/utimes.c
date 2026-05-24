@@ -71,29 +71,31 @@ int vfs_utimes(const struct path *path, struct timespec64 *times)
 	}
 
 #ifdef CONFIG_RSBAC
-	rsbac_pr_debug(aef, "calling ADF\n");
-	rsbac_target = T_FILE;
-	if (S_ISDIR(inode->i_mode))
-		rsbac_target = T_DIR;
-	else if (S_ISFIFO(inode->i_mode))
-		rsbac_target = T_FIFO;
-	else if (S_ISLNK(inode->i_mode))
-		rsbac_target = T_SYMLINK;
-	else if (S_ISSOCK(inode->i_mode))
-		rsbac_target = T_UNIXSOCK;
-	rsbac_target_id.file.device = inode->i_sb->s_dev;
-	rsbac_target_id.file.inode  = inode->i_ino;
-	rsbac_target_id.file.dentry_p = path->dentry;
-	rsbac_attribute_value.dummy = 0;
-	if (!rsbac_adf_request(R_MODIFY_ACCESS_DATA,
-				task_pid(current),
-				rsbac_target,
-				rsbac_target_id,
-				A_none,
-				rsbac_attribute_value)) {
-		error = -EPERM;
-		mnt_drop_write(path->mnt);
-		goto out;
+	if (inode && inode->i_sb) {
+		rsbac_pr_debug(aef, "calling ADF\n");
+		rsbac_target = T_FILE;
+		if (S_ISDIR(inode->i_mode))
+			rsbac_target = T_DIR;
+		else if (S_ISFIFO(inode->i_mode))
+			rsbac_target = T_FIFO;
+		else if (S_ISLNK(inode->i_mode))
+			rsbac_target = T_SYMLINK;
+		else if (S_ISSOCK(inode->i_mode))
+			rsbac_target = T_UNIXSOCK;
+		rsbac_target_id.file.device = inode->i_sb->s_dev;
+		rsbac_target_id.file.inode  = inode->i_ino;
+		rsbac_target_id.file.dentry_p = path->dentry;
+		rsbac_attribute_value.dummy = 0;
+		if (!rsbac_adf_request(R_MODIFY_ACCESS_DATA,
+					task_pid(current),
+					rsbac_target,
+					rsbac_target_id,
+					A_none,
+					rsbac_attribute_value)) {
+			error = -EPERM;
+			mnt_drop_write(path->mnt);
+			goto out;
+		}
 	}
 #endif
 
