@@ -1,9 +1,9 @@
 /*************************************************** */
 /* Rule Set Based Access Control                     */
 /* Implementation of ACL data structures             */
-/* Author and (c) 1999-2025: Amon Ott <ao@rsbac.org> */
+/* Author and (c) 1999-2026: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 14/Oct/2025                        */
+/* Last modified: 27/May/2026                        */
 /*************************************************** */
 
 #include <linux/types.h>
@@ -6530,11 +6530,7 @@ int rsbac_acl_get_rights(rsbac_list_ta_number_t ta_number,
 			/* lookup device */
 			device_p = acl_lookup_device(RSBAC_MAJOR(tid.file.device), RSBAC_MINOR(tid.file.device));
 			if (!device_p) {
-				rsbac_printk(KERN_WARNING "rsbac_acl_get_rights(): Could not lookup device %02u:%02u!\n",
-					     RSBAC_MAJOR(tid.file.
-							 device),
-					     RSBAC_MINOR(tid.file.
-							 device));
+				WARN_ONCE(1, "rsbac_acl_get_rights(): Could not lookup device %02u:%02u!\n", RSBAC_MAJOR(tid.file.device), RSBAC_MINOR(tid.file.device));
 				srcu_read_unlock(&device_list_srcu, srcu_idx);
 				/* Normally, we would return -RSBAC_EINVALIDDEV here.
 				 * To avoid cascades of further error messages, we just return 0
@@ -7138,7 +7134,7 @@ int rsbac_acl_get_single_right(enum rsbac_target_t target,
 			/* lookup device */
 			device_p = acl_lookup_device(RSBAC_MAJOR(tid.file.device), RSBAC_MINOR(tid.file.device));
 			if (!device_p) {
-				rsbac_printk(KERN_WARNING "rsbac_acl_get_single_right(): Could not lookup device %02u:%02u, blindly granting access!\n", RSBAC_MAJOR(tid.file.device), RSBAC_MINOR(tid.file.device));
+				WARN_ONCE(1, "rsbac_acl_get_single_right(): Could not lookup device %02u:%02u, blindly granting access!\n", RSBAC_MAJOR(tid.file.device), RSBAC_MINOR(tid.file.device));
 				srcu_read_unlock(&device_list_srcu, srcu_idx);
 				*result = TRUE;
 				return 0;
