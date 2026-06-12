@@ -1,12 +1,12 @@
 /******************************************* */
 /* Rule Set Based Access Control             */
 /*                                           */
-/* Author and (c) 1999-2025:                 */
+/* Author and (c) 1999-2026:                 */
 /*   Amon Ott <ao@rsbac.org>                 */
 /*                                           */
 /* Debug and logging functions for all parts */
 /*                                           */
-/* Last modified: 08/Aug/2025                */
+/* Last modified: 12/Jun/2026                */
 /******************************************* */
  
 #include <linux/uaccess.h>
@@ -1291,6 +1291,10 @@ int rsbac_log(int type, char * buf, int len)
 		if (len > RSBAC_LOG_MAXREADBUF)
 			len = RSBAC_LOG_MAXREADBUF;
 		k_buf = rsbac_kmalloc(len);
+		if (!k_buf) {
+			error = -ENOMEM;
+			goto out;
+		}
 		count = 0;
 		spin_lock(&rsbac_log_lock);
 		log_item = log_list_head.head;
@@ -1324,6 +1328,10 @@ int rsbac_log(int type, char * buf, int len)
 		if (len > RSBAC_LOG_MAXREADBUF)
 			len = RSBAC_LOG_MAXREADBUF;
 		k_buf = rsbac_kmalloc(len);
+		if (!k_buf) {
+			error = -ENOMEM;
+			goto out;
+		}
 		count = 0;
 		spin_lock(&rsbac_log_lock);
 		log_item = log_list_head.head;
@@ -1357,6 +1365,10 @@ int rsbac_log(int type, char * buf, int len)
 		if (len > RSBAC_LOG_MAXREADBUF)
 			len = RSBAC_LOG_MAXREADBUF;
 		k_buf = rsbac_kmalloc(len);
+		if (!k_buf) {
+			error = -ENOMEM;
+			goto out;
+		}
 		count = 0;
 		spin_lock(&rsbac_log_lock);
 		log_item = log_list_head.head;
