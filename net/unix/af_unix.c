@@ -2088,8 +2088,17 @@ restart:
 #ifdef CONFIG_RSBAC_DEBUG
 		if (   rsbac_debug_aef_net
 		    && sk->sk_socket
+		    && sk->sk_socket->file
+		    && sk->sk_socket->file->f_path.dentry
+		    && sk->sk_socket->file->f_path.dentry->d_inode
 		    && newsk->sk_socket
+		    && newsk->sk_socket->file
+		    && newsk->sk_socket->file->f_path.dentry
+		    && newsk->sk_socket->file->f_path.dentry->d_inode
 		    && other->sk_socket
+		    && other->sk_socket->file
+		    && other->sk_socket->file->f_path.dentry
+		    && other->sk_socket->file->f_path.dentry->d_inode
 		   ) {
 			rsbac_printk(KERN_DEBUG "unix_stream_connect() [sys_connect()]: connected from %u to %u (type %u), orig %u\n",
 				sk->sk_socket->file->f_path.dentry->d_inode->i_ino,
