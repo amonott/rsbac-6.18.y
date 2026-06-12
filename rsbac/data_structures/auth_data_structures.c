@@ -1,9 +1,9 @@
 /*************************************************** */
 /* Rule Set Based Access Control                     */
 /* Implementation of AUTH data structures            */
-/* Author and (c) 1999-2025: Amon Ott <ao@rsbac.org> */
+/* Author and (c) 1999-2026: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 14/Oct/2025                        */
+/* Last modified: 12/Jun/2026                        */
 /*************************************************** */
 
 #include <linux/types.h>
@@ -604,9 +604,12 @@ static struct rsbac_auth_device_list_item_t
 	if (!device_p)
 		return NULL;
 
+	new_p = rsbac_kmalloc(sizeof(*new_p));
+	if (!new_p)
+		return NULL;
+
 	spin_lock(&device_list_lock);
 	old_p = device_list_head_p;
-	new_p = rsbac_kmalloc(sizeof(*new_p));
 	*new_p = *old_p;
 	/* add new device to device list */
 	if (!new_p->head) {	/* first device */
@@ -655,9 +658,9 @@ static void remove_device_item(__u32 major, __u32 minor)
      
 	old_p = device_list_head_p;
 	new_p = rsbac_kmalloc(sizeof(*new_p));
-	*new_p = *old_p;
 	/* first we must locate the item. */
-	if ((item_p = lookup_device_locked(major, minor))) {	/* ok, item was found */
+	if (new_p && (item_p = lookup_device_locked(major, minor))) {	/* ok, item was found */
+		*new_p = *old_p;
 		if (new_p->head == item_p) {	/* item is head */
 			if (new_p->tail == item_p) {	/* item is head and tail = only item -> list will be empty */
 				new_p->head = NULL;
@@ -689,8 +692,10 @@ static void remove_device_item(__u32 major, __u32 minor)
 		/* everything below. */
 		clear_device_item(item_p);
 	}			/* end of if: item was found */
-	else
+	else {
 		spin_unlock(&device_list_lock);
+		rsbac_kfree(new_p);
+	}
 }
 
 /************************************************************************** */

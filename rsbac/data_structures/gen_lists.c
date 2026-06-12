@@ -1,9 +1,9 @@
 /************************************* */
 /* Rule Set Based Access Control       */
-/* Author and (c) 1999-2025:           */
+/* Author and (c) 1999-2026:           */
 /*   Amon Ott <ao@rsbac.org>           */
 /* Generic lists for all parts         */
-/* Last modified: 17/Dec/2025          */
+/* Last modified: 12/Jun/2026          */
 /************************************* */
 
 #include <linux/sched.h>
@@ -3623,9 +3623,9 @@ static inline struct rsbac_list_reg_item_t *create_reg(
 		new_item_p->slabname = rsbac_kmalloc(RSBAC_MAX_SLABNAME);
 		if (!new_item_p->slabname) {
 			rsbac_kfree(new_item_p->hashed);
-			rsbac_sfree(reg_item_slab, new_item_p);
 			if (new_item_p->def_data)
 				rsbac_kfree(new_item_p->def_data);
+			rsbac_sfree(reg_item_slab, new_item_p);
 			return NULL;
 		}
 		if (!RSBAC_IS_AUTO_DEV(major, minor)) {
@@ -3774,23 +3774,23 @@ static inline struct rsbac_list_lol_reg_item_t *create_lol_reg(
 		new_item_p->slabname = rsbac_kmalloc(RSBAC_MAX_SLABNAME);
 		if (!new_item_p->slabname) {
 			rsbac_kfree(new_item_p->hashed);
-			rsbac_sfree(lol_reg_item_slab, new_item_p);
 			if (new_item_p->def_data)
 				rsbac_kfree(new_item_p->def_data);
 			if (new_item_p->def_subdata)
 				rsbac_kfree(new_item_p->def_subdata);
+			rsbac_sfree(lol_reg_item_slab, new_item_p);
 			return NULL;
 		}
 		new_item_p->subslabname = rsbac_kmalloc(RSBAC_MAX_SLABNAME);
 		if (!new_item_p->subslabname) {
 			rsbac_kfree(new_item_p->hashed);
-			rsbac_sfree(lol_reg_item_slab, new_item_p);
 			if (new_item_p->def_data)
 				rsbac_kfree(new_item_p->def_data);
 			if (new_item_p->def_subdata)
 				rsbac_kfree(new_item_p->def_subdata);
 			if (new_item_p->slabname)
 				rsbac_kfree(new_item_p->slabname);
+			rsbac_sfree(lol_reg_item_slab, new_item_p);
 			return NULL;
 		}
 		if (!RSBAC_IS_AUTO_DEV(major, minor)) {
@@ -11485,10 +11485,14 @@ long rsbac_ta_list_lol_get_all_subdesc_ttl(rsbac_list_ta_number_t
 			count = RSBAC_MAX_KMALLOC / item_size;
 		buffer = rsbac_kmalloc(item_size * count);
 		if (buffer) {
-			if (ttl_array_p)
-				ttl_p =
-				    rsbac_kmalloc(sizeof(**ttl_array_p) *
-						  sublist->count);
+			if (ttl_array_p) {
+				ttl_p = rsbac_kmalloc(sizeof(**ttl_array_p) * sublist->count);
+				if (!ttl_p) {
+					rcu_read_unlock();
+					rsbac_kfree(buffer);
+					return -RSBAC_ENOMEM;
+				}
+			}
 			item_p = rcu_dereference(sublist->head);
 			while (item_p && (result < count)) {
 				if (!item_p->max_age
@@ -12272,10 +12276,14 @@ long rsbac_ta_list_lol_get_all_subitems_ttl(rsbac_list_ta_number_t
 			count = RSBAC_MAX_KMALLOC / item_size;
 		buffer = rsbac_kmalloc(item_size * count);
 		if (likely(buffer)) {
-			if (ttl_array_p)
-				ttl_p =
-				    rsbac_kmalloc(sizeof(**ttl_array_p) *
-						  sublist->count);
+			if (ttl_array_p) {
+				ttl_p = rsbac_kmalloc(sizeof(**ttl_array_p) * sublist->count);
+				if (!ttl_p) {
+					rcu_read_unlock();
+					rsbac_kfree(buffer);
+					return -RSBAC_ENOMEM;
+				}
+			}
 			item_p = rcu_dereference(sublist->head);
 			while (item_p && (result < count)) {
 				if (!item_p->max_age

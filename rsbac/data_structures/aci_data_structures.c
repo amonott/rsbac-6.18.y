@@ -2294,10 +2294,12 @@ static struct rsbac_device_list_item_t
 	if (!device_p)
 		return NULL;
 
+	new_p = rsbac_kmalloc(sizeof(*new_p));
+	if (!new_p)
+		 return NULL;
 	hash = device_hash(device_p->minor);
 	spin_lock(&device_list_locks[hash]);
 	old_p = device_head_p[hash];
-	new_p = rsbac_kmalloc(sizeof(*new_p));
 	*new_p = *old_p;
 	/* add new device to device list */
 	if (!new_p->head) {	/* first device */
@@ -6770,12 +6772,14 @@ struct rsbac_kthread_t {
 	struct list_head list;
 	rsbac_pid_t pid;
 };
-struct rsbac_kthread_t * rsbac_kthread;
+struct rsbac_kthread_t * rsbac_kthread = NULL;
 DEFINE_SPINLOCK(rsbac_kthread_lock);
 
 int rsbac_kthreads_init(void)
 {
 	rsbac_kthread = kmalloc(sizeof(struct rsbac_kthread_t), GFP_ATOMIC);
+	if (!rsbac_kthread)
+		return -RSBAC_ENOMEM;
 	INIT_LIST_HEAD(&rsbac_kthread->list);
 	return 0;
 }
@@ -6786,7 +6790,11 @@ int rsbac_mark_kthread(rsbac_pid_t pid)
 
 	if (rsbac_initialized)
 		return 0;
+	if (!rsbac_kthread)
+		return -RSBAC_ENOMEM;
 	rsbac_kthread_new = kmalloc(sizeof(struct rsbac_kthread_t), GFP_ATOMIC);
+	if (!rsbac_kthread_new)
+		return -RSBAC_ENOMEM;
 	rsbac_kthread_new->pid = pid;
 	spin_lock(&rsbac_kthread_lock);
 	list_add(&rsbac_kthread_new->list, &rsbac_kthread->list);
@@ -7014,31 +7022,31 @@ int __init rsbac_init(rsbac_dev_t root_dev)
 		}
 		read_unlock(&tasklist_lock);
 	}
-	list_for_each(p, &rsbac_kthread->list) {
-		rsbac_kthread_entry = list_entry(p, 
-				struct rsbac_kthread_t, list);
-		if (pid_nr(rsbac_kthread_entry->pid) != 1 
-				&& rsbac_kthread_entry->pid != rsbacd_pid)
-		{
-			read_lock(&tasklist_lock);
-			if(pid_task(rsbac_kthread_entry->pid, PIDTYPE_PID)) {
-				read_unlock(&tasklist_lock);
-				rsbac_pr_debug(ds, "Setting other ACI for kthread %u\n", pid_nr(rsbac_kthread_entry->pid));
-				rsbac_kthread_notify(rsbac_kthread_entry->pid);
-			}
-			else {
-				read_unlock(&tasklist_lock);
-				rsbac_pr_debug(ds, "rsbac_do_init(): skipping gone away pid %u\n",
-					pid_nr(rsbac_kthread_entry->pid));
-			}
-			/* kernel list implementation is for exclusive 
-			 * wizards use, let's not free it now till 
-			 * i know why it oops. consume about no 
-			 * memory anyway. michal.
-			 */
+	if (rsbac_kthread) {
+		list_for_each(p, &rsbac_kthread->list) {
+			rsbac_kthread_entry = list_entry(p, struct rsbac_kthread_t, list);
+			if (pid_nr(rsbac_kthread_entry->pid) != 1
+					&& rsbac_kthread_entry->pid != rsbacd_pid) {
+				read_lock(&tasklist_lock);
+				if(pid_task(rsbac_kthread_entry->pid, PIDTYPE_PID)) {
+					read_unlock(&tasklist_lock);
+						rsbac_pr_debug(ds, "Setting other ACI for kthread %u\n", pid_nr(rsbac_kthread_entry->pid));
+					rsbac_kthread_notify(rsbac_kthread_entry->pid);
+				}
+				else {
+					read_unlock(&tasklist_lock);
+					rsbac_pr_debug(ds, "rsbac_do_init(): skipping gone away pid %u\n",
+						pid_nr(rsbac_kthread_entry->pid));
+				}
+				/* kernel list implementation is for exclusive
+				 * wizards use, let's not free it now till
+				 * i know why it oops. consume about no
+				 * memory anyway. michal.
+				 */
 			
-			/* list_del(&rsbac_kthread_entry->list);
-			 * kfree(rsbac_kthread_entry);*/
+				/* list_del(&rsbac_kthread_entry->list);
+				 * kfree(rsbac_kthread_entry);*/
+			}
 		}
 	} /* explicitly mark init and rsbacd */
 	init_pid = find_pid_ns(1, &init_pid_ns);

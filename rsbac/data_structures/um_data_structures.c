@@ -1,9 +1,9 @@
 /*************************************************** */
 /* Rule Set Based Access Control                     */
 /* Implementation of User Management data structures */
-/* Author and (c) 1999-2025: Amon Ott <ao@rsbac.org> */
+/* Author and (c) 1999-2026: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 16/Jul/2025                        */
+/* Last modified: 12/Jun/2026                        */
 /*************************************************** */
 
 #include <linux/types.h>
@@ -2460,6 +2460,10 @@ int rsbac_um_good_pass(rsbac_uid_t uid, char *pass)
 	if (count > 0) {
 		plen = strlen(pass);
 		tmp = rsbac_kmalloc_unlocked(rsbac_max(plen + 1, RSBAC_UM_PWDATA_LEN));
+		if(!tmp) {
+			rsbac_kfree(pwhistory_array);
+			return -RSBAC_ENOMEM;
+		}
 		hist_pass = pwhistory_array;
 
 		for (i = 0; i < count; i++) {

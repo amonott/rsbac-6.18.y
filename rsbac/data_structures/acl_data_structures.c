@@ -3,7 +3,7 @@
 /* Implementation of ACL data structures             */
 /* Author and (c) 1999-2026: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 27/May/2026                        */
+/* Last modified: 12/Jun/2026                        */
 /*************************************************** */
 
 #include <linux/types.h>
@@ -919,9 +919,12 @@ static struct rsbac_acl_device_list_item_t
 	if (!device_p)
 		return NULL;
 
+	new_p = rsbac_kmalloc(sizeof(*new_p));
+	if (!new_p)
+		return NULL;
+
 	spin_lock(&device_list_lock);
 	old_p = device_list_head_p;
-	new_p = rsbac_kmalloc(sizeof(*new_p));
 	*new_p = *old_p;
 	/* add new device to device list */
 	if (!new_p->head) {	/* first device */
@@ -971,10 +974,10 @@ static void remove_device_item(__u32 major, __u32 minor)
 
 	old_p = device_list_head_p;
 	new_p = rsbac_kmalloc(sizeof(*new_p));
-	*new_p = *old_p;
 
 	/* first we must locate the item. */
-	if ((item_p = acl_lookup_device_locked(major, minor))) {
+	if (new_p && (item_p = acl_lookup_device_locked(major, minor))) {
+		*new_p = *old_p;
 		if (new_p->head == item_p) {	/* item is head */
 			if (new_p->tail == item_p) {	/* item is head and tail = only item -> list will be empty */
 				new_p->head = NULL;
@@ -1005,9 +1008,10 @@ static void remove_device_item(__u32 major, __u32 minor)
 		/* now we can remove the item from memory. This means cleaning up */
 		/* everything below. */
 		clear_device_item(item_p);
-	}
-	else
+	} else {
 		spin_unlock(&device_list_lock);
+		rsbac_kfree(new_p);
+	}
 }
 
 /************************************************* */
