@@ -1,8 +1,8 @@
 /*************************************************** */
 /* Rule Set Based Access Control                     */
-/* Author and (c) 1999-2018: Amon Ott <ao@rsbac.org> */
+/* Author and (c) 1999-2026: Amon Ott <ao@rsbac.org> */
 /* Memory allocation                                 */
-/* Last modified: 17/Jan/2018                        */
+/* Last modified: 12/Jun/2026                        */
 /*************************************************** */
 
 #ifndef __RSBAC_RKMEM_H
@@ -28,12 +28,12 @@ void rsbac_kfree (const void * objp);
 /* Separate slabs for RSBAC */
 
 /* name must stay available until after destroy, keep locally */
-static inline struct kmem_cache * rsbac_slab_create(
+static inline struct kmem_cache * __must_check rsbac_slab_create(
 	const char * name,
 	size_t size) {
 	return kmem_cache_create(name, size, 0, 0, NULL);
 }
-static inline struct kmem_cache * rsbac_slab_create_rcu(
+static inline struct kmem_cache * __must_check rsbac_slab_create_rcu(
 	const char * name,
 	size_t size) {
 	return kmem_cache_create(name, size, 0, SLAB_TYPESAFE_BY_RCU, NULL);

@@ -1,8 +1,8 @@
 /*************************************************** */
 /* Rule Set Based Access Control                     */
-/* Author and (c) 1999-2020: Amon Ott <ao@rsbac.org> */
+/* Author and (c) 1999-2026: Amon Ott <ao@rsbac.org> */
 /* Generic List Management                           */
-/* Last modified: 27/Mar/2020                        */
+/* Last modified: 12/Jun/2026                        */
 /*************************************************** */
 
 /* Note: lol = list of lists, a two-level list structure */
@@ -229,7 +229,7 @@ struct rsbac_list_lol_info_t {
    try to read all old_base_name<n> with n from 0 to 31.
  */
 
-int rsbac_list_register_hashed(rsbac_version_t ds_version,
+int __must_check rsbac_list_register_hashed(rsbac_version_t ds_version,
 			rsbac_list_handle_t * handle_p,
 			struct rsbac_list_info_t *info_p,
 			u_int flags,
@@ -242,7 +242,7 @@ int rsbac_list_register_hashed(rsbac_version_t ds_version,
 			rsbac_list_hash_function_t hash_function,
 			char * old_base_name);
 
-int rsbac_list_lol_register_hashed(rsbac_version_t ds_version,
+int __must_check rsbac_list_lol_register_hashed(rsbac_version_t ds_version,
 			rsbac_list_handle_t * handle_p,
 			struct rsbac_list_lol_info_t *info_p,
 			u_int flags,
@@ -262,7 +262,7 @@ int rsbac_list_lol_register_hashed(rsbac_version_t ds_version,
  * hash_function to NULL and old_base_name to NULL.
  */
 
-int rsbac_list_register(rsbac_version_t ds_version,
+int __must_check rsbac_list_register(rsbac_version_t ds_version,
 			rsbac_list_handle_t * handle_p,
 			struct rsbac_list_info_t *info_p,
 			u_int flags,
@@ -270,7 +270,7 @@ int rsbac_list_register(rsbac_version_t ds_version,
 			rsbac_list_get_conv_t * get_conv,
 			void *def_data, char *name, __u32 major, __u32 minor);
 
-int rsbac_list_lol_register(rsbac_version_t ds_version,
+int __must_check rsbac_list_lol_register(rsbac_version_t ds_version,
 			    rsbac_list_handle_t * handle_p,
 			    struct rsbac_list_lol_info_t *info_p,
 			    u_int flags,

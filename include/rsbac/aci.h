@@ -1,11 +1,11 @@
 /******************************* */
 /* Rule Set Based Access Control */
-/* Author and (c) 1999-2021:     */
+/* Author and (c) 1999-2026:     */
 /*   Amon Ott <ao@rsbac.org>     */
 /* API: Data structures          */
 /* and functions for Access      */
 /* Control Information           */
-/* Last modified: 03/Dec/2021    */
+/* Last modified: 12/Jun/2026    */
 /******************************* */
 
 #ifndef __RSBAC_ACI_H
@@ -100,7 +100,7 @@ int rsbac_trigger_write(rsbac_boolean_t force_rehash);
  * In kernels >= 2.4.0, device_p->d_covers is used and the item is properly
  * locked for reading, so never call with a write lock held on device_p!
  */
-int rsbac_get_parent(enum rsbac_target_t target,
+int __must_check rsbac_get_parent(enum rsbac_target_t target,
                      union rsbac_target_id_t tid,
                      enum rsbac_target_t * parent_target_p,
                      union rsbac_target_id_t * parent_tid_p);

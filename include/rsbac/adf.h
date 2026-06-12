@@ -1,10 +1,10 @@
 /******************************* */
 /* Rule Set Based Access Control */
-/* Author and (c) 1999-2025:     */
+/* Author and (c) 1999-2026:     */
 /*   Amon Ott <ao@rsbac.org>     */
 /* API: for Access Control       */
 /* Decision Facility             */
-/* Last modified: 16/Dec/2025    */
+/* Last modified: 12/Jun/2026    */
 /******************************* */
 
 #ifndef __RSBAC_ADF_H
@@ -32,7 +32,7 @@ extern  void rsbac_init_adf(void) __init;
 /* It allows to ignore a certain module (last parameter), e.g. for asking */
 /* all _other_ modules, but not the calling module, to avoid a circle.    */
 
-extern enum rsbac_adf_req_ret_t
+extern enum rsbac_adf_req_ret_t __must_check
    rsbac_adf_request_int(enum  rsbac_adf_request_t     request,
                                rsbac_pid_t             caller_pid,
                          enum  rsbac_target_t          target,
@@ -47,7 +47,7 @@ extern enum rsbac_adf_req_ret_t
 /* It is a simple wrapper to the internal function, setting          */
 /* ignore_module to SW_NONE.                                         */
 
-static inline enum rsbac_adf_req_ret_t
+static inline enum rsbac_adf_req_ret_t __must_check
    rsbac_adf_request( enum  rsbac_adf_request_t     request,
                             rsbac_pid_t             caller_pid,
                       enum  rsbac_target_t          target,
