@@ -6,7 +6,7 @@
 /*                                                   */
 /* Author and (c) 1999-2026: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 06/May/2026                        */
+/* Last modified: 12/Jun/2026                        */
 /*************************************************** */
 
 #include <linux/string.h>
@@ -169,14 +169,16 @@ check_comp_rc(enum rsbac_target_t target,
 			char * target_id_name = rsbac_kmalloc(2 * RSBAC_MAXNAMELEN);
 			char * request_name = rsbac_kmalloc(RSBAC_MAXNAMELEN);
 
-			get_target_name(NULL, T_IPC, target_id_name, tid);
-			rsbac_pr_debug(adf_rc, "pid %u(%s), rc_role %u, IPC target %s, request %s: rc_type is 0, forcing to check against def_ipc_create_type %u!\n",
-				pid_nr(caller_pid),
-				current->comm,
-				i_attr_val1.rc_role,
-				target_id_name,
-				get_request_name(request_name, request),
-				i_attr_val2.rc_type);
+			if (target_id_name && request_name) {
+				get_target_name(NULL, T_IPC, target_id_name, tid);
+				rsbac_pr_debug(adf_rc, "pid %u(%s), rc_role %u, IPC target %s, request %s: rc_type is 0, forcing to check against def_ipc_create_type %u!\n",
+					pid_nr(caller_pid),
+					current->comm,
+					i_attr_val1.rc_role,
+					target_id_name,
+					get_request_name(request_name, request),
+					i_attr_val2.rc_type);
+			}
 			rsbac_kfree(target_id_name);
 			rsbac_kfree(request_name);
 		}
