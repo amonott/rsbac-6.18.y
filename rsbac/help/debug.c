@@ -1687,9 +1687,10 @@ static ssize_t log_levels_proc_write(struct file * file, const char __user * buf
 
     if (!(k_buf = (char *) __get_free_page(GFP_KERNEL)))
       return(-ENOMEM);
-    err = copy_from_user(k_buf, buf, count);
-    if(err < 0)
-      return err;
+    if(copy_from_user(k_buf, buf, count)) {
+      err = -EFAULT;
+      goto out;
+    }
 
   err = count;
   if(count < 15 || strncmp("log_levels", k_buf, 10))
@@ -2156,9 +2157,10 @@ static ssize_t debug_proc_write(struct file * file, const char __user * buf, siz
 
     if (!(k_buf = (char *) __get_free_page(GFP_KERNEL)))
       return(-ENOMEM);
-    err = copy_from_user(k_buf, buf, count);
-    if(err < 0)
-      return err;
+    if(copy_from_user(k_buf, buf, count)) {
+      err = -EFAULT;
+      goto out;
+    }
 
   err = count;
 
@@ -2179,9 +2181,11 @@ static ssize_t debug_proc_write(struct file * file, const char __user * buf, siz
       err = -ENOSYS;
       goto out;
     }
-    if(count < 10)
-      return -EINVAL;
-
+  if(count < 10)
+    {
+      err = -EINVAL;
+      goto out;
+    }
 
 #ifdef CONFIG_RSBAC_SOFTMODE
 #ifdef CONFIG_RSBAC_SOFTMODE_IND
@@ -2558,7 +2562,8 @@ static ssize_t debug_proc_write(struct file * file, const char __user * buf, siz
           {
             rsbac_printk(KERN_WARNING
                          "debug_proc_write(): rsbac_get_attr() returned error!\n");
-            return -EPERM;
+            err = -EPERM;
+            goto out;
           }
         /* if not sec_officer or admin, deny */
         if (i_attr_val1.system_role != SR_security_officer)
@@ -2569,7 +2574,10 @@ static ssize_t debug_proc_write(struct file * file, const char __user * buf, siz
           #endif
             )
           #endif
-          return -EPERM;
+          {
+            err = -EPERM;
+            goto out;
+          }
         rsbac_printk(KERN_INFO
                      "debug_proc_write(): setting rsbac_udf_ttl to %u\n",
                      tmp_ttl);
@@ -2611,7 +2619,8 @@ static ssize_t debug_proc_write(struct file * file, const char __user * buf, siz
           {
             rsbac_printk(KERN_WARNING
                          "debug_proc_write(): rsbac_get_attr() returned error!\n");
-            return -EPERM;
+            err = -EPERM;
+            goto out;
           }
         /* if not sec_officer or admin, deny */
         if (i_attr_val1.system_role != SR_security_officer)
@@ -2622,7 +2631,10 @@ static ssize_t debug_proc_write(struct file * file, const char __user * buf, siz
           #endif
             )
           #endif
-          return -EPERM;
+          {
+            err = -EPERM;
+            goto out;
+          }
         rsbac_printk(KERN_INFO
                      "debug_proc_write(): setting rsbac_udf_progress_ttl to %u\n",
                      tmp_ttl);
