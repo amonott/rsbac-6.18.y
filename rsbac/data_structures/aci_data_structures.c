@@ -5,7 +5,7 @@
 /* (some smaller parts copied from fs/namei.c        */
 /*  and others)                                      */
 /*                                                   */
-/* Last modified: 20/Jan/2026                        */
+/* Last modified: 12/Jun/2026                        */
 /*************************************************** */
 
 #include <linux/types.h>
@@ -3948,10 +3948,11 @@ static ssize_t auto_write_proc_write(struct file *file,
 
 	if (!(k_buf = (char *) __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
-	err = copy_from_user(k_buf, buf, count);
-	if (err < 0)
-		return err;
 
+	if (copy_from_user(k_buf, buf, count)) {
+		err = -EFAULT;
+		goto out;
+	}
 	err = count;
 	if (count < 13 || strncmp("auto", k_buf, 4)) {
 		goto out;

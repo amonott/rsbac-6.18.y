@@ -1,9 +1,9 @@
 /*************************************************** */
 /* Rule Set Based Access Control                     */
 /* Implementation of RSBAC general system calls      */
-/* Author and (C) 1999-2024: Amon Ott <ao@rsbac.org> */
+/* Author and (C) 1999-2026: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 13/Dec/2024                        */
+/* Last modified: 12/Jun/2026                        */
 /*************************************************** */
 
 #include <rsbac/types.h>
@@ -199,7 +199,8 @@ static int sys_rsbac_get_attr(
         }
 
       /* get values from user space */
-      rsbac_get_user(&k_tid, tid, sizeof(k_tid) );
+      if (unlikely(rsbac_get_user(&k_tid, tid, sizeof(k_tid) )))
+        return -RSBAC_EINVALIDPOINTER;
       k_value.dummy = 0;
 
        switch (target) {
@@ -333,7 +334,8 @@ static int sys_rsbac_get_attr_n(
         i_inherit = FALSE;
 
       /* get values from user space */
-      rsbac_get_user(&k_value, value, sizeof(k_value) );
+      if (unlikely(rsbac_get_user(&k_value, value, sizeof(k_value) )))
+        return -RSBAC_EINVALIDPOINTER;
       switch (target) {
                case T_FD:
                case T_FILE:
@@ -554,7 +556,7 @@ static int sys_rsbac_get_attr_n(
           err = rsbac_ta_get_attr(ta_number, module, target, tid, attr, &k_value, i_inherit);
           /* put result value to user space */
           if(!err)
-            rsbac_put_user(&k_value, value, sizeof(k_value) );
+            err = rsbac_put_user(&k_value, value, sizeof(k_value) );
         }
 
 out_dput:
@@ -603,9 +605,10 @@ static int sys_rsbac_set_attr(
 #endif
         
       /* get values from user space */
-      rsbac_get_user(&k_tid, tid, sizeof(k_tid) );
-      rsbac_get_user(&k_value, value, sizeof(k_value) );
-
+      if (unlikely(rsbac_get_user(&k_tid, tid, sizeof(k_tid) )))
+        return -RSBAC_EINVALIDPOINTER;
+      if (unlikely(rsbac_get_user(&k_value, value, sizeof(k_value) )))
+        return -RSBAC_EINVALIDPOINTER;
 
       switch(target)
         {
@@ -725,7 +728,8 @@ static int sys_rsbac_set_attr_n(
         }
 #endif
       /* get values from user space */
-      rsbac_get_user(&k_value, value, sizeof(k_value) );
+      if (unlikely(rsbac_get_user(&k_value, value, sizeof(k_value) )))
+        return -RSBAC_EINVALIDPOINTER;
 
       /* lookup filename */
       if ((err = user_path_at(AT_FDCWD, t_name, 0, &path)))
@@ -943,7 +947,8 @@ static int sys_rsbac_remove_target(
 #endif
 
       /* get values from user space */
-      rsbac_get_user(&k_tid, tid, sizeof(k_tid) );
+      if (unlikely(rsbac_get_user(&k_tid, tid, sizeof(k_tid) )))
+        return -RSBAC_EINVALIDPOINTER;
 
       switch (target) {
         case T_USER:
@@ -1402,10 +1407,8 @@ static int sys_rsbac_net_template(rsbac_list_ta_number_t ta_number,
 		}
 #endif
 		if (call != NTS_delete_template) {
-			err =
-			    rsbac_get_user(&k_data, data_p, sizeof(k_data));
-			if(unlikely(err < 0))
-				return err;
+			if (unlikely(rsbac_get_user(&k_data, data_p, sizeof(k_data) )))
+				return -RSBAC_EINVALIDPOINTER;
 		}
 		break;
 	case NTS_check_id:
@@ -2018,13 +2021,11 @@ static int sys_rsbac_mac_set_curr_level(rsbac_security_level_t level,
                                  rsbac_mac_category_vector_t __user * categories_p)
   {
     rsbac_mac_category_vector_t k_categories;
-    int err;
 
     if(!categories_p)
       return -RSBAC_EINVALIDPOINTER;
-    err = rsbac_get_user(&k_categories, categories_p, sizeof(k_categories));
-    if(unlikely(err < 0))
-      return err;
+    if (unlikely(rsbac_get_user(&k_categories, categories_p, sizeof(k_categories) )))
+      return -RSBAC_EINVALIDPOINTER;
     return rsbac_mac_set_curr_level(level, k_categories);
   }
 
@@ -2521,10 +2522,15 @@ static int sys_rsbac_rc_get_item (
     if(   (target >= RT_NONE)
        || (item >= RI_none))
       return -RSBAC_EINVALIDVALUE;
+
     /* get values from user space */
-    rsbac_get_user(&k_tid, tid_p, sizeof(k_tid) );
-    rsbac_get_user(&k_subtid, subtid_p, sizeof(k_subtid) );
-    rsbac_get_user(&k_value, value_p, sizeof(k_value) );
+    if (unlikely(rsbac_get_user(&k_tid, tid_p, sizeof(k_tid) )))
+      return -RSBAC_EINVALIDPOINTER;
+    if (unlikely(rsbac_get_user(&k_subtid, subtid_p, sizeof(k_subtid) )))
+      return -RSBAC_EINVALIDPOINTER;
+    if (unlikely(rsbac_get_user(&k_value, value_p, sizeof(k_value) )))
+      return -RSBAC_EINVALIDPOINTER;
+
 #ifdef CONFIG_RSBAC_DEBUG
     if (rsbac_debug_aef_rc)
       rsbac_printk(KERN_DEBUG
@@ -2572,9 +2578,13 @@ static int sys_rsbac_rc_set_item(
 #endif
 
     /* get values from user space */
-    rsbac_get_user(&k_tid, tid_p, sizeof(k_tid) );
-    rsbac_get_user(&k_subtid, subtid_p, sizeof(k_subtid) );
-    rsbac_get_user(&k_value, value_p, sizeof(k_value) );
+    if (unlikely(rsbac_get_user(&k_tid, tid_p, sizeof(k_tid) )))
+      return -RSBAC_EINVALIDPOINTER;
+    if (unlikely(rsbac_get_user(&k_subtid, subtid_p, sizeof(k_subtid) )))
+      return -RSBAC_EINVALIDPOINTER;
+    if (unlikely(rsbac_get_user(&k_value, value_p, sizeof(k_value) )))
+      return -RSBAC_EINVALIDPOINTER;
+
 #ifdef CONFIG_RSBAC_DEBUG
     if (rsbac_debug_aef_rc)
       rsbac_printk(KERN_DEBUG
@@ -2597,7 +2607,8 @@ static int sys_rsbac_rc_get_list(
     union rsbac_rc_target_id_t  k_tid;
     int err;
 
-    rsbac_get_user(&k_tid, tid_p, sizeof(k_tid));
+    if (unlikely(rsbac_get_user(&k_tid, tid_p, sizeof(k_tid) )))
+      return -RSBAC_EINVALIDPOINTER;
     if(array_p)
       {
         __u32 * k_array_p;
@@ -3521,7 +3532,6 @@ static int sys_rsbac_res_set_user_limit(rsbac_list_ta_number_t ta_number,
   union rsbac_target_id_t k_tid;
   union rsbac_attribute_value_t k_attr_val;
   rsbac_res_limit_t k_value;
-  int err;
 
   switch (attr)
     {
@@ -3546,9 +3556,8 @@ static int sys_rsbac_res_set_user_limit(rsbac_list_ta_number_t ta_number,
   k_attr_val.dummy = 0;
 
   if (value_p) {
-    err = rsbac_get_user(&k_value, value_p, sizeof(k_value));
-    if(err < 0)
-      return err;
+    if (unlikely(rsbac_get_user(&k_value, value_p, sizeof(k_value) )))
+      return -RSBAC_EINVALIDPOINTER;
   }
 
   /* call ADF */
@@ -3698,9 +3707,8 @@ static int sys_rsbac_res_set_file_limit(rsbac_list_ta_number_t ta_number,
     }
 
   if (value_p) {
-    err = rsbac_get_user(&k_value, value_p, sizeof(k_value));
-    if(err < 0)
-      return err;
+    if (unlikely(rsbac_get_user(&k_value, value_p, sizeof(k_value) )))
+      return -RSBAC_EINVALIDPOINTER;
   }
 
   /* lookup filename */
@@ -3800,9 +3808,8 @@ static int sys_rsbac_acl(
         return -RSBAC_EINVALIDPOINTER;
 
       /* get values from user space */
-      err = rsbac_get_user(&k_arg, arg, sizeof(k_arg));
-      if(err < 0)
-        return err;
+      if (unlikely(rsbac_get_user(&k_arg, arg, sizeof(k_arg) )))
+        return -RSBAC_EINVALIDPOINTER;
 
       if(k_arg.target >= T_NONE)
         return -RSBAC_EINVALIDTARGET;
@@ -3958,9 +3965,8 @@ static int sys_rsbac_acl_n(
       if((current->thread_info.status & TS_COMPAT) || test_thread_flag(TIF_ADDR32)) {
         struct rsbac_acl_syscall_n_arg_ia32_t k_arg_ia32;
 
-        err = rsbac_get_user(&k_arg_ia32, arg, sizeof(k_arg_ia32) );
-        if(err < 0)
-          return err;
+        if (unlikely(rsbac_get_user(&k_arg_ia32, arg, sizeof(k_arg_ia32) )))
+          return -RSBAC_EINVALIDPOINTER;
         memset(&k_arg, 0, sizeof(k_arg));
         k_arg.target = k_arg_ia32.target;
         k_arg.name = (void __user *)(long)k_arg_ia32.name;
@@ -3970,9 +3976,8 @@ static int sys_rsbac_acl_n(
         k_arg.ttl = k_arg_ia32.ttl;
       } else {
 #endif
-        err = rsbac_get_user(&k_arg, arg, sizeof(k_arg) );
-        if(err < 0)
-          return err;
+        if (unlikely(rsbac_get_user(&k_arg, arg, sizeof(k_arg) )))
+          return -RSBAC_EINVALIDPOINTER;
 #if defined(CONFIG_IA32_EMULATION) || defined(CONFIG_X86_X32)
       }
 #endif
@@ -4271,7 +4276,8 @@ static int sys_rsbac_acl_get_rights(
       if(!arg || !rights_p)
         return -RSBAC_EINVALIDPOINTER;
       /* get values from user space */
-      rsbac_get_user(&k_arg, arg, sizeof(k_arg) );
+      if (unlikely(rsbac_get_user(&k_arg, arg, sizeof(k_arg) )))
+        return -RSBAC_EINVALIDPOINTER;
 
       if(k_arg.target >= T_NONE)
         return -RSBAC_EINVALIDTARGET;
@@ -4350,7 +4356,8 @@ static int sys_rsbac_acl_get_rights_n(
       if(!arg || !rights_p)
         return -RSBAC_EINVALIDPOINTER;
       /* get values from user space */
-      rsbac_get_user(&k_arg, arg, sizeof(k_arg) );
+      if (unlikely(rsbac_get_user(&k_arg, arg, sizeof(k_arg) )))
+        return -RSBAC_EINVALIDPOINTER;
 
       if(k_arg.target >= T_NONE)
         return -RSBAC_EINVALIDTARGET;
@@ -4576,7 +4583,7 @@ out_dput:
 out:
       if(!err)
         {
-          rsbac_put_user(&k_rights, rights_p, sizeof(k_rights) );
+          err = rsbac_put_user(&k_rights, rights_p, sizeof(k_rights) );
         }
       return err;
     }      /* end of sys_rsbac_acl_get_rights_n() */
@@ -4594,7 +4601,7 @@ static int sys_rsbac_acl_get_tlist (
       union  rsbac_target_id_t   k_tid;
       struct rsbac_acl_entry_t * k_entry_p;
              rsbac_time_t      * k_ttl_p;
-             int   err = 0;
+             int   count = 0;
 
       if(!tid || (target >= T_NONE))
         return -RSBAC_EINVALIDTARGET;
@@ -4606,9 +4613,8 @@ static int sys_rsbac_acl_get_tlist (
         maxnum = RSBAC_ACL_MAX_MAXNUM;
 
       /* get values from user space */
-      err = rsbac_get_user(&k_tid, tid, sizeof(k_tid) );
-      if(unlikely(err < 0))
-        return err;
+      if (unlikely(rsbac_get_user(&k_tid, tid, sizeof(k_tid) )))
+        return -RSBAC_EINVALIDPOINTER;
       switch (target) {
               case T_FD:
                       return -RSBAC_EINVALIDTARGET;
@@ -4630,24 +4636,28 @@ static int sys_rsbac_acl_get_tlist (
       }
 
       /* call acl function */
-      err = rsbac_acl_sys_get_tlist(ta_number, target, k_tid, &k_entry_p, &k_ttl_p);
-      if(err>0)
+      count = rsbac_acl_sys_get_tlist(ta_number, target, k_tid, &k_entry_p, &k_ttl_p);
+      if(count > 0)
         {
-          if(err > maxnum)
-            err = maxnum;
-          rsbac_put_user(k_entry_p,
+          int tmperr;
+
+          if(count > maxnum)
+            count = maxnum;
+          tmperr = rsbac_put_user(k_entry_p,
                          entry_array,
-                         err * sizeof(*k_entry_p) );
-          if(ttl_array)
+                         count * sizeof(*k_entry_p) );
+          if(!tmperr && ttl_array)
             {
-              rsbac_put_user(k_ttl_p,
+              tmperr = rsbac_put_user(k_ttl_p,
                              ttl_array,
-                             err * sizeof(*k_ttl_p) );
+                             count * sizeof(*k_ttl_p) );
             }
+          if (unlikely(tmperr))
+            count = tmperr;
           rsbac_kfree(k_entry_p);
           rsbac_kfree(k_ttl_p);
         }
-      return err;
+      return count;
     }      /* end of sys_rsbac_acl_get_tlist() */
 
 static int sys_rsbac_acl_get_tlist_n(
@@ -4848,19 +4858,23 @@ out_dput:
       if(need_put)
         path_put(&path);
 out:
-      if(err>0)
+      if(err > 0)
         {
+          int tmperr;
+
           if(err > maxnum)
             err = maxnum;
-          rsbac_put_user(k_entry_p,
+          tmperr = rsbac_put_user(k_entry_p,
                          entry_array,
                          err * sizeof(*k_entry_p) );
-          if(ttl_array)
+          if(!tmperr && ttl_array)
             {
-              rsbac_put_user(k_ttl_p,
+              tmperr = rsbac_put_user(k_ttl_p,
                              ttl_array,
                              err * sizeof(*k_ttl_p) );
             }
+          if(unlikely(tmperr))
+            err = tmperr;
           rsbac_kfree(k_entry_p);
           rsbac_kfree(k_ttl_p);
         }
@@ -4885,7 +4899,8 @@ static int sys_rsbac_acl_get_mask (
         return -RSBAC_EINVALIDPOINTER;
 
       /* get values from user space */
-      rsbac_get_user(&k_tid, tid, sizeof(k_tid) );
+      if (unlikely(rsbac_get_user(&k_tid, tid, sizeof(k_tid) )))
+        return -RSBAC_EINVALIDPOINTER;
       switch (target) {
               case T_FD:
                       return -RSBAC_EINVALIDTARGET;
@@ -4909,7 +4924,7 @@ static int sys_rsbac_acl_get_mask (
       err = rsbac_acl_sys_get_mask(ta_number, target, k_tid, &k_mask);
       if(!err)
         {
-          rsbac_put_user(&k_mask,
+          err = rsbac_put_user(&k_mask,
                          mask_p,
                          sizeof(k_mask) );
         }
@@ -5110,7 +5125,7 @@ out_dput:
 out:
       if(!err)
         {
-          rsbac_put_user(&k_mask,
+          err = rsbac_put_user(&k_mask,
                          mask_p,
                          sizeof(k_mask) );
         }
@@ -5125,7 +5140,6 @@ static int sys_rsbac_acl_group(
   union rsbac_acl_group_syscall_arg_t __user * arg_p)
     { 
       union rsbac_acl_group_syscall_arg_t k_arg;
-      int   err = 0;
 
       if(call >= ACLGS_none)
         return -RSBAC_EINVALIDREQUEST;
@@ -5153,12 +5167,11 @@ static int sys_rsbac_acl_group(
 #endif
 
       /* get values from user space */
-      err = rsbac_get_user(&k_arg, arg_p, sizeof(k_arg) );
+      if (unlikely(rsbac_get_user(&k_arg, arg_p, sizeof(k_arg) )))
+        return -RSBAC_EINVALIDPOINTER;
 
       /* call acl function */
-      if(err >= 0)
-        err = rsbac_acl_sys_group(ta_number, call, k_arg);
-      return err;
+      return rsbac_acl_sys_group(ta_number, call, k_arg);
     }      /* end of sys_rsbac_acl() */
 
 static int sys_rsbac_acl_list_all_dev(
@@ -6714,11 +6727,15 @@ static int sys_rsbac_um_get_user_list(
       count = rsbac_um_get_user_list(ta_number, vset, &k_user_array);
       if(count>0)
         {
+          int tmperr;
+
           if(count > maxnum)
             count = maxnum;
-          rsbac_put_user(k_user_array,
+          tmperr = rsbac_put_user(k_user_array,
                          user_array,
                          count * sizeof(*k_user_array) );
+          if(unlikely(tmperr))
+            count = tmperr;
           rsbac_kfree(k_user_array);
         }
       return count;
@@ -6771,13 +6788,17 @@ static int sys_rsbac_um_get_gm_list(
         return rsbac_um_get_gm_list(ta_number, user, NULL);
 
       count = rsbac_um_get_gm_list(ta_number, user, &k_group_array);
-      if(count>0)
+      if(count > 0)
         {
+          int tmperr;
+
           if(count > maxnum)
             count = maxnum;
-          rsbac_put_user(k_group_array,
+          tmperr = rsbac_put_user(k_group_array,
                          group_array,
                          count * sizeof(*k_group_array) );
+          if(unlikely(tmperr))
+            count = tmperr;
           rsbac_kfree(k_group_array);
         }
       return count;
@@ -6832,15 +6853,19 @@ static int sys_rsbac_um_get_gm_user_list(
     count = rsbac_um_get_gm_user_list(ta_number, group, &k_user_array);
     if(count>0)
       {
+        int tmperr;
+
         if(count > maxnum)
           count = maxnum;
-        rsbac_put_user(k_user_array,
+        tmperr = rsbac_put_user(k_user_array,
                        user_array,
                        count * sizeof(*k_user_array) );
+        if (unlikely(tmperr))
+          count = tmperr;
         rsbac_kfree(k_user_array);
       }
     return count;
-    } /* end of sys_rsbac_um_get_gm_user_list() */
+  } /* end of sys_rsbac_um_get_gm_user_list() */
 
 static int sys_rsbac_um_get_group_list(
   rsbac_list_ta_number_t ta_number,
@@ -6892,11 +6917,15 @@ static int sys_rsbac_um_get_group_list(
       count = rsbac_um_get_group_list(ta_number, vset, &k_group_array);
       if(count>0)
         {
+          int tmperr;
+
           if(count > maxnum)
             count = maxnum;
-          rsbac_put_user(k_group_array,
+          tmperr = rsbac_put_user(k_group_array,
                          group_array,
                          count * sizeof(*k_group_array) );
+          if(unlikely(tmperr))
+            count = tmperr;
           rsbac_kfree(k_group_array);
         }
       return count;
@@ -8347,7 +8376,7 @@ static int sys_rsbac_get_adf_log(enum rsbac_adf_request_t   request,
     err = rsbac_get_adf_log(request, target, &k_value);
     if(!err)
       {
-        rsbac_put_user(&k_value,
+        err = rsbac_put_user(&k_value,
                        value_p,
                        sizeof(k_value) );
       }

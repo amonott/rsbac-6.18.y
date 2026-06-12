@@ -1,8 +1,8 @@
 /************************************* */
 /* Rule Set Based Access Control       */
-/* Author and (c) 1999-2024: Amon Ott  */
+/* Author and (c) 1999-2026: Amon Ott  */
 /* Helper functions for all parts      */
-/* Last modified:  29/Jul/2024         */
+/* Last modified:  12/Jun/2026         */
 /************************************* */
 
 #ifndef __RSBAC_HELPER_H
@@ -13,6 +13,7 @@
 #include <linux/uaccess.h>
 #include <rsbac/types.h>
 #include <rsbac/rkmem.h>
+#include <rsbac/error.h>
 
 char * inttostr(char[], int);
 
@@ -41,21 +42,23 @@ static inline rsbac_um_set_t rsbac_get_vset(void)
 
 void rsbac_get_owner(rsbac_uid_t * user_p);
 
-static inline int rsbac_get_user(void * kern_p, void __user * user_p, int size)
+static inline int __must_check rsbac_get_user(void * kern_p, void __user * user_p, int size)
   {
     if(kern_p && user_p && (size > 0))
       {
-        return copy_from_user(kern_p, user_p, size);
+        if(unlikely(copy_from_user(kern_p, user_p, size)))
+          return -RSBAC_EINVALIDPOINTER;
       }
     return 0;
   }
 
 
-static inline int rsbac_put_user(void * kern_p, void __user * user_p, int size)
+static inline int __must_check rsbac_put_user(void * kern_p, void __user * user_p, int size)
   {
     if(kern_p && user_p && (size > 0))
       {
-        return copy_to_user(user_p,kern_p,size);
+        if(unlikely(copy_to_user(user_p, kern_p, size)))
+          return -RSBAC_EINVALIDPOINTER;
       }
     return 0;
   }

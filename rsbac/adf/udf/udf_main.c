@@ -192,9 +192,10 @@ static ssize_t udf_checker_proc_write(struct file * file, const char __user * bu
      *   Program gets called with single parameter "path to file"
      *   and must exit with either 0 (allowed) or another value (denied)
      */
-    err = copy_from_user(k_buf, buf, count);
-    if(err < 0)
-      return err;
+    if(copy_from_user(k_buf, buf, count)) {
+      err = -EFAULT;
+      goto out;
+    }
     k_buf[RSBAC_MAXNAMELEN - 1] = 0;
     p = k_buf;
     if (*p && (*p != '/') && (*p != '\n')) {
