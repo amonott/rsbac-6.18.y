@@ -8027,7 +8027,7 @@ static int get_attr_fd(rsbac_list_ta_number_t ta_number,
 		}
 
 #ifdef CONFIG_RSBAC_FD_CACHE
-		if (inherit && !ta_number && device_p->fd_cache_handle[module] && likely(device_p)) {
+		if (inherit && !ta_number && likely(device_p) && device_p->fd_cache_handle[module]) {
 			rsbac_enum_t cache_attr = attr;
 
 			if (!rsbac_list_lol_get_subdata(device_p->fd_cache_handle[module],
