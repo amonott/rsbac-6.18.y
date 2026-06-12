@@ -4,9 +4,9 @@
 /* Facility (ADF) - ACL module                       */
 /* File: rsbac/adf/acl/syscalls.c                    */
 /*                                                   */
-/* Author and (c) 1999-2024: Amon Ott <ao@rsbac.org> */
+/* Author and (c) 1999-2026: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 12/Dec/2024                        */
+/* Last modified: 12/Jun/2026                        */
 /*************************************************** */
 
 #include <linux/string.h>
@@ -270,17 +270,20 @@ int rsbac_acl_sys_set_acl_entry(
                 /* max. file name len + some extra */
                 #endif
 
-                u64tostracl(rights_string, rights);
-                get_acl_subject_type_name(subject_type_name, subj_type);
-                get_target_name(target_type_name, target, target_id_name, tid);
-                rsbac_printk(KERN_INFO
-                       "rsbac_acl_sys_set_acl_entry(): setting rights %s for %s %u to %s %s denied for user %u!\n",
-                       rights_string,
-                       subject_type_name,
-                       subj_id,
-                       target_type_name,
-                       target_id_name,
-                       user);
+                if(rights_string && subject_type_name && target_type_name && target_id_name)
+                  {
+                    u64tostracl(rights_string, rights);
+                    get_acl_subject_type_name(subject_type_name, subj_type);
+                    get_target_name(target_type_name, target, target_id_name, tid);
+                    rsbac_printk(KERN_INFO
+                           "rsbac_acl_sys_set_acl_entry(): setting rights %s for %s %u to %s %s denied for user %u!\n",
+                           rights_string,
+                           subject_type_name,
+                           subj_id,
+                           target_type_name,
+                           target_id_name,
+                           user);
+                  }
                 rsbac_kfree(rights_string);
                 rsbac_kfree(subject_type_name);
                 rsbac_kfree(target_type_name);
@@ -312,15 +315,18 @@ int rsbac_acl_sys_set_acl_entry(
                 /* max. file name len + some extra */
                 #endif
 
-                get_acl_subject_type_name(subject_type_name, subj_type);
-                get_target_name(target_type_name, target, target_id_name, tid);
-                rsbac_printk(KERN_INFO
-                       "rsbac_acl_sys_set_acl_entry(): setting SUPERVISOR for %s %u to %s %s denied for user %u!\n",
-                       subject_type_name,
-                       subj_id,
-                       target_type_name,
-                       target_id_name,
-                       user);
+                if(subject_type_name && target_type_name && target_id_name)
+                  {
+                    get_acl_subject_type_name(subject_type_name, subj_type);
+                    get_target_name(target_type_name, target, target_id_name, tid);
+                    rsbac_printk(KERN_INFO
+                           "rsbac_acl_sys_set_acl_entry(): setting SUPERVISOR for %s %u to %s %s denied for user %u!\n",
+                           subject_type_name,
+                           subj_id,
+                           target_type_name,
+                           target_id_name,
+                           user);
+                  }
                 rsbac_kfree(subject_type_name);
                 rsbac_kfree(target_type_name);
                 rsbac_kfree(target_id_name);
@@ -398,15 +404,18 @@ int rsbac_acl_sys_remove_acl_entry(
             /* max. file name len + some extra */
             #endif
 
-            get_acl_subject_type_name(subject_type_name, subj_type);
-            get_target_name(target_type_name, target, target_id_name, tid);
-            rsbac_printk(KERN_INFO
-                   "rsbac_acl_sys_remove_acl_entry(): removing ACL entry for %s %u at %s %s denied for user %u!\n",
-                   subject_type_name,
-                   subj_id,
-                   target_type_name,
-                   target_id_name,
-                   user);
+            if(subject_type_name && target_type_name && target_id_name)
+              {
+                get_acl_subject_type_name(subject_type_name, subj_type);
+                get_target_name(target_type_name, target, target_id_name, tid);
+                rsbac_printk(KERN_INFO
+                       "rsbac_acl_sys_remove_acl_entry(): removing ACL entry for %s %u at %s %s denied for user %u!\n",
+                       subject_type_name,
+                       subj_id,
+                       target_type_name,
+                       target_id_name,
+                       user);
+              }
             rsbac_kfree(subject_type_name);
             rsbac_kfree(target_type_name);
             rsbac_kfree(target_id_name);
@@ -450,15 +459,18 @@ int rsbac_acl_sys_remove_acl_entry(
                 /* max. file name len + some extra */
                 #endif
 
-                get_acl_subject_type_name(subject_type_name, subj_type);
-                get_target_name(target_type_name, target, target_id_name, tid);
-                rsbac_printk(KERN_INFO
-                       "rsbac_acl_sys_remove_acl_entry(): removing ACL entry with SUPERVISOR for %s %u at %s %s denied for user %u!\n",
-                       subject_type_name,
-                       subj_id,
-                       target_type_name,
-                       target_id_name,
-                       user);
+                if(subject_type_name && target_type_name && target_id_name)
+                  {
+                    get_acl_subject_type_name(subject_type_name, subj_type);
+                    get_target_name(target_type_name, target, target_id_name, tid);
+                    rsbac_printk(KERN_INFO
+                           "rsbac_acl_sys_remove_acl_entry(): removing ACL entry with SUPERVISOR for %s %u at %s %s denied for user %u!\n",
+                           subject_type_name,
+                           subj_id,
+                           target_type_name,
+                           target_id_name,
+                           user);
+                  }
                 rsbac_kfree(subject_type_name);
                 rsbac_kfree(target_type_name);
                 rsbac_kfree(target_id_name);
@@ -518,12 +530,15 @@ int rsbac_acl_sys_remove_acl(
             /* max. file name len + some extra */
             #endif
 
-            get_target_name(target_type_name, target, target_id_name, tid);
-            rsbac_printk(KERN_INFO
-                   "rsbac_acl_sys_remove_acl(): removing ACL from %s %s denied for user %u!\n",
-                   target_type_name,
-                   target_id_name,
-                   user);
+            if(target_type_name && target_id_name)
+              {
+                get_target_name(target_type_name, target, target_id_name, tid);
+                rsbac_printk(KERN_INFO
+                       "rsbac_acl_sys_remove_acl(): removing ACL from %s %s denied for user %u!\n",
+                       target_type_name,
+                       target_id_name,
+                       user);
+              }
             rsbac_kfree(target_type_name);
             rsbac_kfree(target_id_name);
             #ifdef CONFIG_RSBAC_SOFTMODE
@@ -607,17 +622,20 @@ int rsbac_acl_sys_add_to_acl_entry(
                 /* max. file name len + some extra */
                 #endif
 
-                u64tostracl(rights_string, rights);
-                get_acl_subject_type_name(subject_type_name, subj_type);
-                get_target_name(target_type_name, target, target_id_name, tid);
-                rsbac_printk(KERN_INFO
-                       "rsbac_acl_sys_add_to_acl_entry(): adding rights %s for %s %u to %s %s denied for user %u!\n",
-                       rights_string,
-                       subject_type_name,
-                       subj_id,
-                       target_type_name,
-                       target_id_name,
-                       user);
+                if(rights_string && subject_type_name && target_type_name && target_id_name)
+                  {
+                    u64tostracl(rights_string, rights);
+                    get_acl_subject_type_name(subject_type_name, subj_type);
+                    get_target_name(target_type_name, target, target_id_name, tid);
+                    rsbac_printk(KERN_INFO
+                           "rsbac_acl_sys_add_to_acl_entry(): adding rights %s for %s %u to %s %s denied for user %u!\n",
+                           rights_string,
+                           subject_type_name,
+                           subj_id,
+                           target_type_name,
+                           target_id_name,
+                           user);
+                  }
                 rsbac_kfree(rights_string);
                 rsbac_kfree(subject_type_name);
                 rsbac_kfree(target_type_name);
@@ -648,15 +666,18 @@ int rsbac_acl_sys_add_to_acl_entry(
                 /* max. file name len + some extra */
                 #endif
 
-                get_acl_subject_type_name(subject_type_name, subj_type);
-                get_target_name(target_type_name, target, target_id_name, tid);
-                rsbac_printk(KERN_INFO
-                       "rsbac_acl_sys_add_to_acl_entry(): adding SUPERVISOR for %s %u to %s %s denied for user %u!\n",
-                       subject_type_name,
-                       subj_id,
-                       target_type_name,
-                       target_id_name,
-                       user);
+                if(subject_type_name && target_type_name && target_id_name)
+                  {
+                    get_acl_subject_type_name(subject_type_name, subj_type);
+                    get_target_name(target_type_name, target, target_id_name, tid);
+                    rsbac_printk(KERN_INFO
+                           "rsbac_acl_sys_add_to_acl_entry(): adding SUPERVISOR for %s %u to %s %s denied for user %u!\n",
+                           subject_type_name,
+                           subj_id,
+                           target_type_name,
+                           target_id_name,
+                           user);
+                  }
                 rsbac_kfree(subject_type_name);
                 rsbac_kfree(target_type_name);
                 rsbac_kfree(target_id_name);
@@ -735,17 +756,20 @@ int rsbac_acl_sys_remove_from_acl_entry(
             /* max. file name len + some extra */
             #endif
 
-            u64tostracl(rights_string, rights);
-            get_acl_subject_type_name(subject_type_name, subj_type);
-            get_target_name(target_type_name, target, target_id_name, tid);
-            rsbac_printk(KERN_INFO
-                   "rsbac_acl_sys_remove_from_acl_entry(): removing rights %s for %s %u to %s %s denied for user %u!\n",
-                   rights_string,
-                   subject_type_name,
-                   subj_id,
-                   target_type_name,
-                   target_id_name,
-                   user);
+            if(rights_string && subject_type_name && target_type_name && target_id_name)
+              {
+                u64tostracl(rights_string, rights);
+                get_acl_subject_type_name(subject_type_name, subj_type);
+                get_target_name(target_type_name, target, target_id_name, tid);
+                rsbac_printk(KERN_INFO
+                       "rsbac_acl_sys_remove_from_acl_entry(): removing rights %s for %s %u to %s %s denied for user %u!\n",
+                       rights_string,
+                       subject_type_name,
+                       subj_id,
+                       target_type_name,
+                       target_id_name,
+                       user);
+              }
             rsbac_kfree(rights_string);
             rsbac_kfree(subject_type_name);
             rsbac_kfree(target_type_name);
@@ -775,15 +799,18 @@ int rsbac_acl_sys_remove_from_acl_entry(
                 /* max. file name len + some extra */
                 #endif
 
-                get_acl_subject_type_name(subject_type_name, subj_type);
-                get_target_name(target_type_name, target, target_id_name, tid);
-                rsbac_printk(KERN_INFO
-                       "rsbac_acl_sys_remove_from_acl_entry(): removing SUPERVISOR for %s %u to %s %s denied for user %u!\n",
-                       subject_type_name,
-                       subj_id,
-                       target_type_name,
-                       target_id_name,
-                       user);
+                if(subject_type_name && target_type_name && target_id_name)
+                  {
+                    get_acl_subject_type_name(subject_type_name, subj_type);
+                    get_target_name(target_type_name, target, target_id_name, tid);
+                    rsbac_printk(KERN_INFO
+                           "rsbac_acl_sys_remove_from_acl_entry(): removing SUPERVISOR for %s %u to %s %s denied for user %u!\n",
+                           subject_type_name,
+                           subj_id,
+                           target_type_name,
+                           target_id_name,
+                           user);
+                  }
                 rsbac_kfree(subject_type_name);
                 rsbac_kfree(target_type_name);
                 rsbac_kfree(target_id_name);
@@ -860,14 +887,17 @@ int rsbac_acl_sys_set_mask(
             /* max. file name len + some extra */
             #endif
 
-            u64tostracl(rights_string, mask);
-            get_target_name(target_type_name, target, target_id_name, tid);
-            rsbac_printk(KERN_INFO
-                         "rsbac_acl_sys_set_mask(): setting mask %s for %s %s denied for user %u!\n",
-                         rights_string,
-                         target_type_name,
-                         target_id_name,
-                         user);
+            if(rights_string && target_type_name && target_id_name)
+              {
+                u64tostracl(rights_string, mask);
+                get_target_name(target_type_name, target, target_id_name, tid);
+                rsbac_printk(KERN_INFO
+                             "rsbac_acl_sys_set_mask(): setting mask %s for %s %s denied for user %u!\n",
+                             rights_string,
+                             target_type_name,
+                             target_id_name,
+                             user);
+              }
             rsbac_kfree(rights_string);
             rsbac_kfree(target_type_name);
             rsbac_kfree(target_id_name);
