@@ -5,7 +5,7 @@
 /*                                                   */
 /* Author and (c) 1999-2025: Amon Ott <ao@rsbac.org> */
 /*                                                   */
-/* Last modified: 17/Dec/2025                        */
+/* Last modified: 12/Jun/2026                        */
 /*************************************************** */
 
 #include <linux/string.h>
@@ -1103,18 +1103,13 @@ log:
 #endif
         char * program_path;
 
-	/* parent pid */
-	if(current->parent)
-	  parent_pid = get_task_pid(current->parent, PIDTYPE_PID);
-
         /* rsbac_kmalloc all memory */
         request_name = rsbac_kmalloc(32);
         res_name = rsbac_kmalloc(32);
         res_mods = rsbac_kmalloc(RSBAC_MAXNAMELEN);
         target_type_name = rsbac_kmalloc(RSBAC_MAXNAMELEN);
         #ifdef CONFIG_RSBAC_LOG_FULL_PATH
-        target_id_name
-         = rsbac_kmalloc(CONFIG_RSBAC_MAX_PATH_LEN + RSBAC_MAXNAMELEN);
+        target_id_name = rsbac_kmalloc(CONFIG_RSBAC_MAX_PATH_LEN + RSBAC_MAXNAMELEN);
            /* max. path name len + some extra */
         #else
         target_id_name = rsbac_kmalloc(2 * RSBAC_MAXNAMELEN);
@@ -1122,8 +1117,7 @@ log:
         #endif
         #ifdef CONFIG_RSBAC_LOG_PROGRAM_FILE
         #ifdef CONFIG_RSBAC_LOG_FULL_PATH
-        program_path
-         = rsbac_kmalloc(CONFIG_RSBAC_MAX_PATH_LEN + RSBAC_MAXNAMELEN);
+        program_path = rsbac_kmalloc(CONFIG_RSBAC_MAX_PATH_LEN + RSBAC_MAXNAMELEN);
            /* max. path name len + some extra */
         #else
         program_path = rsbac_kmalloc(2 * RSBAC_MAXNAMELEN);
@@ -1138,6 +1132,15 @@ log:
         remote_ip_name = rsbac_kmalloc(32);
 #endif
         audit_uid_name = rsbac_kmalloc(32);
+
+        if (unlikely(!request_name || !res_name || !res_mods || !target_type_name ||
+            !target_id_name || !program_path || !attr_name || !attr_val_name ||
+            !audit_uid_name))
+            goto out_log;
+
+	/* parent pid */
+	if(current->parent)
+	  parent_pid = get_task_pid(current->parent, PIDTYPE_PID);
 
         request_name[0] = (char) 0;
         target_type_name[0] = (char) 0;
@@ -1390,6 +1393,8 @@ log:
           }
         if (parent_pid)
           put_pid(parent_pid);
+
+out_log:
         /* rsbac_kfree all helper mem */
         rsbac_kfree(request_name);
         rsbac_kfree(res_name);
